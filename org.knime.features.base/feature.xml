@@ -17,12 +17,12 @@
 
    <license>
       GNU GENERAL PUBLIC LICENSE with Additional Permissions according to Sec. 7
-*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** 
-Please see below the General Public License (GPL), Version 3, 
-and the Additional Permissions according to Sec. 7 
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Please see below the General Public License (GPL), Version 3,
+and the Additional Permissions according to Sec. 7
 applying to the files in this folder:
 
-*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** 
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
 
                     GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
@@ -699,10 +699,10 @@ the library.  If this is what you want to do, use the GNU Lesser General
 Public License instead of this License.  But first, please read
 &lt;http://www.gnu.org/philosophy/why-not-lgpl.html&gt;.
 
-*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** 
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
 
 Additional permissions under GNU GPL Version 3 Section 7:
- 
+
 KNIME interoperates with ECLIPSE solely via ECLIPSE&apos;s plug-in APIs.
 Hence, KNIME and ECLIPSE are both independent programs and are not
 derived from each other. Should, however, the interpretation of the
@@ -713,8 +713,8 @@ ECLIPSE with only the license terms in place for ECLIPSE applying to
 ECLIPSE and the GNU GPL Version 3 applying for KNIME, provided the
 license terms of ECLIPSE themselves allow for the respective use and
 propagation of ECLIPSE together with KNIME.
- 
- 
+
+
 Additional permission relating to nodes for KNIME that extend the Node
 Extension (and in particular that are based on subclasses of NodeModel,
 NodeDialog, and NodeView) and that only interoperate with KNIME through
@@ -734,76 +734,10 @@ propagated with or for interoperation with KNIME.
       <import feature="org.eclipse.platform" version="4.4.2" match="greaterOrEqual"/>
       <import feature="org.eclipse.rcp" version="4.4.2" match="greaterOrEqual"/>
       <import plugin="org.eclipse.jdt.core" version="3.10.0" match="greaterOrEqual"/>
-      <import plugin="org.knime.workbench.explorer.view" version="7.0.0" match="greaterOrEqual"/>
    </requires>
 
    <plugin
          id="org.knime.base"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.core"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.core.ui"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.workbench"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.workbench.core"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.workbench.editor"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.workbench.ui"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.workbench.repository"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.workbench.help"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.ext.sun"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.product"
          download-size="0"
          install-size="0"
          version="0.0.0"/>
@@ -817,13 +751,6 @@ propagated with or for interoperation with KNIME.
          unpack="false"/>
 
    <plugin
-         id="org.knime.timeseries"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
          id="org.knime.time"
          download-size="0"
          install-size="0"
@@ -831,59 +758,10 @@ propagated with or for interoperation with KNIME.
          unpack="false"/>
 
    <plugin
-         id="org.knime.workbench.ui.layout"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.core.pmml"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
          id="org.knime.rsyntaxtextarea"
          download-size="0"
          install-size="0"
          version="0.0.0"/>
-
-   <plugin
-         id="org.knime.jsnippets"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.stats"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"/>
-
-   <plugin
-         id="org.knime.core.data.uritype"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.workbench.ui.browser"
-         os="linux"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         fragment="true"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.startup.macosx"
-         os="macosx"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
 
    <plugin
          id="javax.mail.glassfish"
@@ -907,34 +785,6 @@ propagated with or for interoperation with KNIME.
          unpack="false"/>
 
    <plugin
-         id="org.knime.base.treeensembles"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.base.treeensembles2"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.workbench.workflowcoach"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
-         id="org.knime.core.wizard"
-         download-size="0"
-         install-size="0"
-         version="0.0.0"
-         unpack="false"/>
-
-   <plugin
          id="org.apache.commons.logging.log4j"
          download-size="0"
          install-size="0"
@@ -948,5 +798,4 @@ propagated with or for interoperation with KNIME.
          install-size="0"
          version="0.0.0"
          fragment="true"/>
-
 </feature>
