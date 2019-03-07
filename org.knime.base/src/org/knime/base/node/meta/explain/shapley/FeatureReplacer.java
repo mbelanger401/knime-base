@@ -82,6 +82,7 @@ public class FeatureReplacer {
         CheckUtils.checkArgument(samplingSet.length > 0, "The sampling set may not be empty.");
         m_samplingSet = samplingSet.clone();
         m_random = new RandomDataGenerator();
+        // TODO implement proper column handling
         m_featureCount = m_samplingSet[0].getNumCells();
     }
 
@@ -94,7 +95,7 @@ public class FeatureReplacer {
      */
     public ReplacementResult replaceFeatures(final DataRow row, final int foi) {
         assert row.getNumCells() == m_samplingSet[0].getNumCells();
-        int[] perm = m_random.nextPermutation(m_samplingSet.length, m_samplingSet.length);
+        int[] perm = m_random.nextPermutation(m_featureCount, m_featureCount);
         DataRow sampledRow = sampleRow();
         DataCell[] withFoiReplaced = getCells(row);
         DataCell[] withoutFoiReplaced = withFoiReplaced.clone();
@@ -123,7 +124,8 @@ public class FeatureReplacer {
     }
 
     private DataRow sampleRow() {
-        return m_samplingSet[m_random.nextInt(0, m_samplingSet.length)];
+        final int i = m_random.nextInt(0, m_samplingSet.length - 1);
+        return m_samplingSet[i];
     }
 
     static class ReplacementResult {

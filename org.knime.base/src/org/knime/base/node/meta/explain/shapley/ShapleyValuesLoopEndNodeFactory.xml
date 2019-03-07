@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<knimeNode icon="featureselection-start.png" type="LoopStart"
+	xmlns="http://knime.org/node/v3.6"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://knime.org/node/v3.6 http://knime.org/node/v3.6.xsd">
+	<name>Shapley Values Loop End</name>
+
+	<shortDescription>End node for a Shapley Values loop
+	</shortDescription>
+
+	<fullDescription>
+		<intro>
+			Calculates Shapley Values.
+		</intro>
+	</fullDescription>
+
+	<ports>
+		<inPort index="0" name="Table containing the rows to explain.">
+			Table containing the perturbed rows with model predictions.
+		</inPort>
+		<outPort index="0" name="Table containing the Shapley Values.">Table containing the Shapley Values.</outPort>
+	</ports>
+</knimeNode>

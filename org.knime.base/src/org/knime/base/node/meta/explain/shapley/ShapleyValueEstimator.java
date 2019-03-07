@@ -107,11 +107,11 @@ public class ShapleyValueEstimator {
     List<DataRow> prepareRow(final DataRow row) {
         final List<DataRow> rows = new ArrayList<>(2 * row.getNumCells() * m_iterationsPerFeature);
         final RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
-        for (int i = 0; i < row.getNumCells() - m_numTargetCols; i++) {
+        for (int i = 0; i < m_featureReplacer.getFeatureCount(); i++) {
             for (int j = 0; j < m_iterationsPerFeature; j++) {
                 ReplacementResult r = m_featureReplacer.replaceFeatures(row, i);
-                rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getFoiReplaced()));
                 rows.add(new DefaultRow(keyGen.createKey(i, j, false), r.getFoiIntact()));
+                rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getFoiReplaced()));
             }
         }
         return rows;
@@ -151,9 +151,9 @@ public class ShapleyValueEstimator {
 
     private static double getPrediction(final DataRow row) {
         // TODO generalize to cases with multiple predictions
-        DataCell targetCell = row.getCell(row.getNumCells() - 1);
+        final DataCell targetCell = row.getCell(row.getNumCells() - 1);
         if (targetCell instanceof DoubleValue) {
-            DoubleValue val = (DoubleValue)targetCell;
+            final DoubleValue val = (DoubleValue)targetCell;
             return val.getDoubleValue();
         } else {
             throw new IllegalArgumentException("The prediction column of '" + row + "' is not numerical.");
@@ -219,9 +219,7 @@ public class ShapleyValueEstimator {
          * @return
          */
         private static int parseIteration(final String[] split) {
-            int iteration;
-            iteration = Integer.parseInt(split[split.length - POS_ITERATION]);
-            return iteration;
+            return Integer.parseInt(split[split.length - POS_ITERATION]);
         }
 
         private static int parseFeatureIdx(final String[] split) {
@@ -257,7 +255,7 @@ public class ShapleyValueEstimator {
             final String[] split = split(key);
             final String originalKey = recreateOriginalKey(split);
             CheckUtils.checkArgument(m_originalKey.equals(originalKey),
-                "The row with key '" + key + "' does not belong the current batch of rows.");
+                "The row with key '" + key + "' does not belong to the current batch of rows.");
             CheckUtils.checkArgument(isRightOrder(expectedFeatureIdx, expectedIteration, withFoiReplaced, split),
                 "The rows corresponding to the original row key '" + m_originalKey
                     + "' are not in the expected order.");

@@ -51,6 +51,11 @@ package org.knime.base.node.meta.explain.shapley;
 import java.io.File;
 import java.io.IOException;
 
+import org.knime.core.data.DataRow;
+import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.container.CloseableRowIterator;
+import org.knime.core.data.container.ColumnRearranger;
+import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -59,11 +64,8 @@ import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeModel;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
-import org.knime.core.node.port.PortObject;
-import org.knime.core.node.port.PortObjectSpec;
-import org.knime.core.node.port.PortType;
-import org.knime.core.node.port.flowvariable.FlowVariablePortObject;
 import org.knime.core.node.workflow.LoopEndNode;
+import org.knime.core.node.workflow.LoopStartNode;
 
 /**
  *
@@ -71,30 +73,66 @@ import org.knime.core.node.workflow.LoopEndNode;
  */
 public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndNode {
 
+    private static final String LOOP_NAME = "Shapley Values Loop";
 
     /**
      * Constructor
      */
     public ShapleyValuesLoopEndNodeModel() {
-        super(new PortType[]{FlowVariablePortObject.TYPE}, new PortType[]{BufferedDataTable.TYPE});
+        super(1, 1);
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    protected PortObjectSpec[] configure(final PortObjectSpec[] inSpecs) throws InvalidSettingsException {
-        // TODO
-        return null;
+    protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
+        getLoopStart();
+        return new DataTableSpec[]{createOutSpec(inSpecs[0])};
+    }
+
+    private ShapleyValuesLoopStartNodeModel getLoopStart() throws InvalidSettingsException {
+        final LoopStartNode loopStart = getLoopStartNode();
+        if (loopStart instanceof ShapleyValuesLoopStartNodeModel) {
+            return (ShapleyValuesLoopStartNodeModel)loopStart;
+        } else {
+            throw new InvalidSettingsException(
+                "The " + LOOP_NAME + " End node can only be used with the " + LOOP_NAME + " Start node.");
+        }
+    }
+
+    // TODO this should perhaps be the responsibility of the estimator
+    private static DataTableSpec createOutSpec(final DataTableSpec inSpec) {
+        // TODO support multiple prediction targets
+        // TODO relax assumptions that prediction columns are in the end
+        final ColumnRearranger cr = new ColumnRearranger(inSpec);
+        cr.remove(inSpec.getNumColumns() - 1);
+        return cr.createSpec();
     }
 
     /**
      * {@inheritDoc}
      */
     @Override
-    protected PortObject[] execute(final PortObject[] inObjects, final ExecutionContext exec) throws Exception {
-        // TODO
-        return null;
+    protected BufferedDataTable[] execute(final BufferedDataTable[] inData, final ExecutionContext exec)
+        throws Exception {
+        // TODO implement progress
+        final BufferedDataTable data = inData[0];
+        final ShapleyValueEstimator estimator = getEstimator();
+        final DataTableSpec outSpec = createOutSpec(data.getDataTableSpec());
+        final BufferedDataContainer container = exec.createDataContainer(outSpec);
+        try (final CloseableRowIterator iterator = data.iterator()) {
+                    while (iterator.hasNext()) {
+                        final DataRow shapleyValues = estimator.calculateShapleyValuesForNextRow(iterator);
+                        container.addRowToTable(shapleyValues);
+                    }
+        }
+        container.close();
+        return new BufferedDataTable[]{container.getTable()};
+    }
+
+    private ShapleyValueEstimator getEstimator() throws InvalidSettingsException {
+        return getLoopStart().getEstimator();
     }
 
     /**
