@@ -55,16 +55,29 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.knime.base.node.meta.explain.shapley.FeatureReplacer.ReplacementResult;
+import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;
+import org.knime.core.data.DoubleValue;
 import org.knime.core.data.RowKey;
 import org.knime.core.data.def.DefaultRow;
 import org.knime.core.node.util.CheckUtils;
 
 /**
+ * Estimates the Shapley Values using algorithm 1 proposed by Strumbelj and Kononenko in their paper "Explaining
+ * prediction models and individual predictions with feature contributions"
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
 public class ShapleyValueEstimator {
+
+    /**
+    *
+    */
+    private static final String DELIMITER = "_";
+
+    private static final String FOI_REPLACED = "t";
+
+    private static final String FOI_NOT_REPLACED = "f";
 
     private final FeatureReplacer m_featureReplacer;
 
@@ -72,6 +85,14 @@ public class ShapleyValueEstimator {
 
     private final int m_numTargetCols;
 
+    /**
+     * Estimates the Shapley Values using algorithm 1 proposed by Strumbelj and Kononenko in their paper "Explaining
+     * prediction models and individual predictions with feature contributions"
+     *
+     * @param featureReplacer allows to transform a single row to obtain multiple transformed rows
+     * @param iterationsPerFeature the number of iterations to perform per feature
+     * @param numTargetCols the number of target columns
+     */
     public ShapleyValueEstimator(final FeatureReplacer featureReplacer, final int iterationsPerFeature,
         final int numTargetCols) {
         CheckUtils.checkArgument(numTargetCols > 0, "At least one prediction column must be included.");
@@ -84,27 +105,32 @@ public class ShapleyValueEstimator {
     }
 
     List<DataRow> prepareRow(final DataRow row) {
-        List<DataRow> rows = new ArrayList<>(2 * row.getNumCells() * m_iterationsPerFeature);
-        RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
+        final List<DataRow> rows = new ArrayList<>(2 * row.getNumCells() * m_iterationsPerFeature);
+        final RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
         for (int i = 0; i < row.getNumCells() - m_numTargetCols; i++) {
             for (int j = 0; j < m_iterationsPerFeature; j++) {
                 ReplacementResult r = m_featureReplacer.replaceFeatures(row, i);
-                rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getWithFoiReplaced()));
-                rows.add(new DefaultRow(keyGen.createKey(i, j, false), r.getWithoutFoiReplaced()));
+                rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getFoiReplaced()));
+                rows.add(new DefaultRow(keyGen.createKey(i, j, false), r.getFoiIntact()));
             }
         }
         return rows;
     }
 
-    double[] calculateShapleyValuesForNextRow(final Iterator<DataRow> rows) {
+    DataRow calculateShapleyValuesForNextRow(final Iterator<DataRow> rows) {
         DataRow currentRow = rows.next();
-        final String originalKey = RowKeyGenerator.parseOriginalKey(currentRow.getKey());
+        final RowKey firstKey = currentRow.getKey();
+        final RowKeyChecker checker = new RowKeyChecker(firstKey);
         final int featureCount = m_featureReplacer.getFeatureCount();
-        double[] shapleyValues = new double[featureCount];
+        final double[] shapleyValues = new double[featureCount];
         for (int i = 0; i < featureCount; i++) {
             double currentShapleyValue = 0.0;
             for (int j = 0; j < m_iterationsPerFeature; j++) {
-                currentShapleyValue += getDifferenceInPredictions(currentRow, rows.next());
+                final DataRow foiIntact = currentRow;
+                final DataRow foiReplaced = rows.next();
+                checker.checkRowKey(foiIntact.getKey(), i, j, false);
+                checker.checkRowKey(foiReplaced.getKey(), i, j, true);
+                currentShapleyValue += getDifferenceInPredictions(foiIntact, foiReplaced);
                 if (rows.hasNext()) {
                     currentRow = rows.next();
                 } else {
@@ -115,19 +141,137 @@ public class ShapleyValueEstimator {
             }
             shapleyValues[i] = currentShapleyValue / m_iterationsPerFeature;
         }
-        return shapleyValues;
+        return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues);
     }
 
-    private double getDifferenceInPredictions(final DataRow withFoiReplaced, final DataRow withoutFoiReplaced) {
-        // TODO
-        return 0;
+    private static double getDifferenceInPredictions(final DataRow foiReplaced, final DataRow foiIntact) {
+        // TODO generalize to cases with multiple predictions
+        return getPrediction(foiIntact) - getPrediction(foiReplaced);
+    }
+
+    private static double getPrediction(final DataRow row) {
+        // TODO generalize to cases with multiple predictions
+        DataCell targetCell = row.getCell(row.getNumCells() - 1);
+        if (targetCell instanceof DoubleValue) {
+            DoubleValue val = (DoubleValue)targetCell;
+            return val.getDoubleValue();
+        } else {
+            throw new IllegalArgumentException("The prediction column of '" + row + "' is not numerical.");
+        }
+    }
+
+    private static class RowKeyChecker {
+        /**
+         * The number of components that the row key generator adds to the original row key
+         */
+        private static final int NUM_ADDITIONAL_COMPONENTS = 3;
+
+        /**
+         * Distance of the iteration component from the end of a generated row key
+         */
+        private static final int POS_ITERATION = 2;
+
+        /**
+         * Minimal number of components of a generated row key
+         */
+        private static final int MIN_COMPONENTS_PER_KEY = 4;
+
+        /**
+         * Distance of the feature index component from the end of the split row key
+         */
+        private static final int POS_FEATURE_IDX = 3;
+
+        private final String m_originalKey;
+
+        /**
+         * Checks if a row belongs to the current batch. </br>
+         * Has to be initialized with the {@link RowKey} of the first row in the batch. Fails if the first row key does
+         * not designate the start of a row batch.
+         *
+         * @param keyOfFirstRowInBatch the row key of the first row in the current row batch
+         */
+        public RowKeyChecker(final RowKey keyOfFirstRowInBatch) {
+            final RowKey key = keyOfFirstRowInBatch;
+            final String[] split = split(key);
+            int featureIdx = -1;
+            int iteration = -1;
+            try {
+                featureIdx = parseFeatureIdx(split);
+                iteration = parseIteration(split);
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException(createErrorString(key));
+            }
+            CheckUtils.checkArgument(featureIdx == 0 && iteration == 0,
+                "The row with key '" + key + "' is not the first row in a row batch.");
+            m_originalKey = recreateOriginalKey(split);
+        }
+
+        public String getOriginalKey() {
+            return m_originalKey;
+        }
+
+        private static String createErrorString(final RowKey generatedKey) {
+            return "The row key '" + generatedKey + "' was not created by an instance of this RowKeyGenerator.";
+        }
+
+        /**
+         * @param split
+         * @return
+         */
+        private static int parseIteration(final String[] split) {
+            int iteration;
+            iteration = Integer.parseInt(split[split.length - POS_ITERATION]);
+            return iteration;
+        }
+
+        private static int parseFeatureIdx(final String[] split) {
+            return Integer.parseInt(split[split.length - POS_FEATURE_IDX]);
+        }
+
+        private static String[] split(final RowKey key) {
+            final String[] split = key.getString().split(DELIMITER);
+            CheckUtils.checkArgument(split.length >= MIN_COMPONENTS_PER_KEY, createErrorString(key));
+            return split;
+        }
+
+        private static String recreateOriginalKey(final String[] split) {
+            // TODO figure out if there is a more efficient way to do this
+            return Arrays.stream(split, 0, split.length - NUM_ADDITIONAL_COMPONENTS)
+                .collect(Collectors.joining(DELIMITER));
+        }
+
+        private static boolean isFoiReplaced(final String[] split) {
+            return split[split.length - 1].equals(FOI_REPLACED);
+        }
+
+        /**
+         * Checks whether the provided <b>key</b> belongs to the row that is currently expected.
+         *
+         * @param key to check
+         * @param expectedFeatureIdx the feature index the current row should have
+         * @param expectedIteration iteration the current row should have
+         * @param withFoiReplaced whether the FOI should be replaced in the current row
+         */
+        public void checkRowKey(final RowKey key, final int expectedFeatureIdx, final int expectedIteration,
+            final boolean withFoiReplaced) {
+            final String[] split = split(key);
+            final String originalKey = recreateOriginalKey(split);
+            CheckUtils.checkArgument(m_originalKey.equals(originalKey),
+                "The row with key '" + key + "' does not belong the current batch of rows.");
+            CheckUtils.checkArgument(isRightOrder(expectedFeatureIdx, expectedIteration, withFoiReplaced, split),
+                "The rows corresponding to the original row key '" + m_originalKey
+                    + "' are not in the expected order.");
+        }
+
+        private static boolean isRightOrder(final int expectedFeatureIdx, final int expectedIteration,
+            final boolean expectFoiReplaced, final String[] split) {
+            return expectedFeatureIdx == parseFeatureIdx(split) && expectedIteration == parseIteration(split)
+                && isFoiReplaced(split) == expectFoiReplaced;
+        }
     }
 
     private static class RowKeyGenerator {
-        /**
-         *
-         */
-        private static final String DELIMITER = "_";
+
         private String m_originalKey;
 
         private RowKeyGenerator(final RowKey originalKey) {
@@ -141,47 +285,10 @@ public class ShapleyValueEstimator {
             sb.append(DELIMITER);
             sb.append(iteration);
             sb.append(DELIMITER);
-            sb.append(withFoiReplaced ? "o" : "i");
+            sb.append(withFoiReplaced ? FOI_REPLACED : FOI_NOT_REPLACED);
             return new RowKey(sb.toString());
         }
 
-        static boolean isStartOfRowBatch(final RowKey key) {
-            String[] split = key.getString().split(DELIMITER);
-            CheckUtils.checkArgument(split.length >= 4, createErrorString(key));
-
-            // TODO
-            return false;
-        }
-
-
-        static String parseOriginalKey(final RowKey generatedKey) {
-            String[] split = split(generatedKey);
-            return Arrays.stream(split).limit(split.length - 3l).collect(Collectors.joining(DELIMITER));
-        }
-
-        private static String[] split(final RowKey generatedKey) {
-            String[] split = generatedKey.getString().split(DELIMITER);
-            CheckUtils.checkArgument(split.length >= 4, createErrorString(generatedKey));
-            return split;
-        }
-
-        static int parseFeatureIdx(final RowKey generatedKey) {
-            String[] split = generatedKey.getString().split(DELIMITER);
-            CheckUtils.checkArgument(split.length < 4, createErrorString(generatedKey));
-            int idxOfFeatureIdx = split.length - 3;
-            int featureIdx = -1;
-            try {
-                featureIdx = Integer.parseInt(split[idxOfFeatureIdx]);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException(createErrorString(generatedKey));
-            }
-            CheckUtils.checkArgument(featureIdx >= 0, createErrorString(generatedKey));
-            return featureIdx;
-        }
-
-        private static String createErrorString(final RowKey generatedKey) {
-            return "The row key '" + generatedKey + "' was not created by an instance of this RowKeyGenerator.";
-        }
     }
 
 }

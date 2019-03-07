@@ -65,11 +65,18 @@ public class FeatureReplacer {
 
     private final int m_featureCount;
 
+    /**
+     * @param samplingSet
+     * @param seed
+     */
     public FeatureReplacer(final DataRow[] samplingSet, final long seed) {
         this(samplingSet);
         m_random.getRandomGenerator().setSeed(seed);
     }
 
+    /**
+     * @param samplingSet
+     */
     public FeatureReplacer(final DataRow[] samplingSet) {
         CheckUtils.checkNotNull(samplingSet);
         CheckUtils.checkArgument(samplingSet.length > 0, "The sampling set may not be empty.");
@@ -104,11 +111,14 @@ public class FeatureReplacer {
 
     }
 
+    /**
+     * @return
+     */
     public int getFeatureCount() {
         return m_featureCount;
     }
 
-    private DataCell[] getCells(final DataRow row) {
+    private static DataCell[] getCells(final DataRow row) {
         return row.stream().toArray(DataCell[]::new);
     }
 
@@ -118,19 +128,19 @@ public class FeatureReplacer {
 
     static class ReplacementResult {
         private final DataCell[] m_withFoiReplaced;
-        private final DataCell[] m_withoutFoiReplaced;
+        private final DataCell[] m_withoutIntact;
 
         ReplacementResult(final DataCell[] withFoiReplaced, final DataCell[] withoutFoiReplaced) {
             m_withFoiReplaced = withFoiReplaced;
-            m_withoutFoiReplaced = withoutFoiReplaced;
+            m_withoutIntact = withoutFoiReplaced;
         }
 
-        DataCell[] getWithFoiReplaced() {
+        DataCell[] getFoiReplaced() {
             return m_withFoiReplaced;
         }
 
-        DataCell[] getWithoutFoiReplaced() {
-            return m_withoutFoiReplaced;
+        DataCell[] getFoiIntact() {
+            return m_withoutIntact;
         }
     }
 }
