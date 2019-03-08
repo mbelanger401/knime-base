@@ -51,10 +51,13 @@ package org.knime.base.node.meta.explain.shapley;
 import java.io.File;
 import java.io.IOException;
 
+import org.knime.core.data.DataColumnSpec;
+import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.DataTableSpecCreator;
 import org.knime.core.data.container.CloseableRowIterator;
-import org.knime.core.data.container.ColumnRearranger;
+import org.knime.core.data.def.DoubleCell;
 import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
@@ -105,9 +108,13 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
     private static DataTableSpec createOutSpec(final DataTableSpec inSpec) {
         // TODO support multiple prediction targets
         // TODO relax assumptions that prediction columns are in the end
-        final ColumnRearranger cr = new ColumnRearranger(inSpec);
-        cr.remove(inSpec.getNumColumns() - 1);
-        return cr.createSpec();
+        final DataTableSpecCreator specCreator = new DataTableSpecCreator();
+        for (int i = 0; i < inSpec.getNumColumns() - 1; i++) {
+            final DataColumnSpec c = inSpec.getColumnSpec(i);
+            final DataColumnSpecCreator csr = new DataColumnSpecCreator(c.getName(), DoubleCell.TYPE);
+            specCreator.addColumns(csr.createSpec());
+        }
+        return specCreator.createSpec();
     }
 
     /**

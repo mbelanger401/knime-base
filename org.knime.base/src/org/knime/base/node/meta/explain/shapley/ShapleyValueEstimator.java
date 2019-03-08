@@ -109,7 +109,7 @@ public class ShapleyValueEstimator {
         final RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
         for (int i = 0; i < m_featureReplacer.getFeatureCount(); i++) {
             for (int j = 0; j < m_iterationsPerFeature; j++) {
-                ReplacementResult r = m_featureReplacer.replaceFeatures(row, i);
+                final ReplacementResult r = m_featureReplacer.replaceFeatures(row, i);
                 rows.add(new DefaultRow(keyGen.createKey(i, j, false), r.getFoiIntact()));
                 rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getFoiReplaced()));
             }
@@ -118,22 +118,31 @@ public class ShapleyValueEstimator {
     }
 
     DataRow calculateShapleyValuesForNextRow(final Iterator<DataRow> rows) {
-        DataRow currentRow = rows.next();
-        final RowKey firstKey = currentRow.getKey();
+        final PeekingIterator<DataRow> iterator = new PeekingIterator<>(rows);
+        final RowKey firstKey = iterator.peek().getKey();
         final RowKeyChecker checker = new RowKeyChecker(firstKey);
+        final double[] shapleyValues = calculateShapleyValues(iterator, checker);
+        return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues);
+    }
+
+    /**
+     * @param iterator provides the rows for the current row batch
+     * @param checker used to ensure that all rows in the current row batch belong together and are in the right order
+     * @return a double array containing the Shapley Values
+     */
+    private double[] calculateShapleyValues(final Iterator<DataRow> iterator, final RowKeyChecker checker) {
         final int featureCount = m_featureReplacer.getFeatureCount();
         final double[] shapleyValues = new double[featureCount];
         for (int i = 0; i < featureCount; i++) {
             double currentShapleyValue = 0.0;
             for (int j = 0; j < m_iterationsPerFeature; j++) {
-                final DataRow foiIntact = currentRow;
-                final DataRow foiReplaced = rows.next();
+                final DataRow foiIntact = iterator.next();
+                final DataRow foiReplaced = iterator.next();
                 checker.checkRowKey(foiIntact.getKey(), i, j, false);
                 checker.checkRowKey(foiReplaced.getKey(), i, j, true);
                 currentShapleyValue += getDifferenceInPredictions(foiIntact, foiReplaced);
-                if (rows.hasNext()) {
-                    currentRow = rows.next();
-                } else {
+                if (!iterator.hasNext()) {
+                    // Check if we expect to be at the end
                     CheckUtils.checkState(i == featureCount - 1, "Not all transformed rows arrived in the loop end.");
                     CheckUtils.checkState(j == m_iterationsPerFeature - 1,
                         "Not all transformed rows arrived in the loop end.");
@@ -141,7 +150,7 @@ public class ShapleyValueEstimator {
             }
             shapleyValues[i] = currentShapleyValue / m_iterationsPerFeature;
         }
-        return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues);
+        return shapleyValues;
     }
 
     private static double getDifferenceInPredictions(final DataRow foiReplaced, final DataRow foiIntact) {
