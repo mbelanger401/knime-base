@@ -53,40 +53,51 @@ import java.util.List;
 
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTable;
+import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.RowIterator;
 import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.ExecutionContext;
+import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
+import org.knime.core.node.util.CheckUtils;
 
 /**
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-class ShapleyValueEstimator {
+class ShapleyValuesEstimator {
 
-    private ShapleyValueAlgorithm m_algorithm;
+    /**
+     *
+     */
+    private static final double PROG_FRAC_SAMPLING_CREATION = 0.5;
+
+    private static final double PROG_FRAC_PERTURB_ROWS = 0.5;
+
+    private ShapleyValuesAlgorithm m_algorithm;
 
     private final TablePreparer m_tablePreparer;
 
-    private final LoopStartSettings m_settings;
+    private final ShapleyValuesSettings m_settings;
 
-    public ShapleyValueEstimator(final LoopStartSettings settings) {
+    public ShapleyValuesEstimator(final ShapleyValuesSettings settings) {
         m_tablePreparer = new TablePreparer(settings.getFeatureCols(), settings.getPredictionCols());
         m_settings = settings;
     }
 
-    private void initializeAlgorithm(final DataTable samplingTable) throws InvalidSettingsException {
-        final DataRow[] samplingSet = createSamplingSet(samplingTable);
+    private void initializeAlgorithm(final BufferedDataTable samplingTable, final ExecutionMonitor prog)
+        throws Exception {
+        final DataRow[] samplingSet = createSamplingSet(samplingTable, prog);
         final FeatureReplacer fr = new FeatureReplacer(samplingSet);
-        m_algorithm = new ShapleyValueAlgorithm(fr, m_settings.getIterationsPerFeature(),
+        m_algorithm = new ShapleyValuesAlgorithm(fr, m_settings.getIterationsPerFeature(),
             m_tablePreparer.getNumPredictionColumns());
     }
 
     public BufferedDataTable executeLoopStart(final BufferedDataTable roiTable, final BufferedDataTable samplingTable,
         final ExecutionContext exec) throws Exception {
-        initializeAlgorithm(samplingTable);
-        return perturbRows(roiTable, exec);
+        initializeAlgorithm(samplingTable, exec.createSubProgress(PROG_FRAC_SAMPLING_CREATION));
+        return perturbRows(roiTable, exec.createSubExecutionContext(PROG_FRAC_PERTURB_ROWS));
     }
 
     /**
@@ -96,13 +107,19 @@ class ShapleyValueEstimator {
      * @throws InvalidSettingsException
      */
     private BufferedDataTable perturbRows(final BufferedDataTable roiTable, final ExecutionContext exec)
-        throws InvalidSettingsException {
+        throws Exception {
+        exec.setMessage("Perturb rows");
         final RowIterator roiIterator = getRoiIterator(roiTable);
+        final double total = roiTable.size();
+        long current = 0;
 
-        final BufferedDataContainer container =
-            exec.createDataContainer(m_tablePreparer.getLoopStartSpec(roiTable.getDataTableSpec()));
+        final BufferedDataContainer container = exec.createDataContainer(m_tablePreparer.getLoopStartSpec());
 
         while (roiIterator.hasNext()) {
+            exec.checkCanceled();
+            final DataRow row = roiIterator.next();
+            exec.setProgress(current / total, "Perturb row " + row.getKey());
+            current++;
             for (DataRow perturbed : m_algorithm.prepareRow(roiIterator.next())) {
                 container.addRowToTable(perturbed);
             }
@@ -110,6 +127,42 @@ class ShapleyValueEstimator {
         container.close();
 
         return container.getTable();
+    }
+
+    public DataTableSpec configureLoopStart(final DataTableSpec roiSpec, final DataTableSpec samplingSpec)
+        throws InvalidSettingsException {
+        m_tablePreparer.updateSpecs(roiSpec);
+        CheckUtils.checkSetting(m_tablePreparer.isValidSamplingSpec(samplingSpec),
+            "The provided sampling table %s contains not all feature columns.", samplingSpec);
+        return m_tablePreparer.getLoopStartSpec();
+    }
+
+    public BufferedDataTable executeLoopEnd(final BufferedDataTable predictedTable, final ExecutionContext exec)
+        throws Exception {
+        exec.setMessage("Calculating Shapley Values.");
+        final double total = predictedTable.size();
+        long current = 0;
+        final DataTableSpec outputSpec = m_tablePreparer.getLoopEndSpec(predictedTable.getDataTableSpec());
+        final RowIterator iter = getPredictionIterator(predictedTable);
+        final BufferedDataContainer container = exec.createDataContainer(outputSpec);
+        while (iter.hasNext()) {
+            exec.checkCanceled();
+            final DataRow row = m_algorithm.calculateShapleyValuesForNextRow(iter);
+            exec.setProgress(current / total, "Finished Shapley Value calculation for row " + row.getKey());
+            container.addRowToTable(row);
+            current++;
+        }
+        container.close();
+        return container.getTable();
+    }
+
+    public DataTableSpec createLoopEndSpec(final DataTableSpec inSpec) throws InvalidSettingsException {
+        return m_tablePreparer.getLoopEndSpec(inSpec);
+    }
+
+    private RowIterator getPredictionIterator(final DataTable predictionTable) throws InvalidSettingsException {
+        final DataTable filtered = m_tablePreparer.prepareTableForEvaluation(predictionTable);
+        return filtered.iterator();
     }
 
     private RowIterator getRoiIterator(final DataTable roiTable) throws InvalidSettingsException {
@@ -122,10 +175,17 @@ class ShapleyValueEstimator {
      * @return
      * @throws InvalidSettingsException
      */
-    private DataRow[] createSamplingSet(final DataTable samplingTable) throws InvalidSettingsException {
+    private DataRow[] createSamplingSet(final BufferedDataTable samplingTable, final ExecutionMonitor prog)
+        throws Exception {
+        prog.setProgress("Create sampling dataset");
         final DataTable filtered = m_tablePreparer.prepareTableForPerturbation(samplingTable);
         final List<DataRow> samplingData = new ArrayList<>();
+        long current = 0;
+        final double total = samplingTable.size();
         for (DataRow row : filtered) {
+            prog.checkCanceled();
+            prog.setProgress(current / total, "Reading row " + row.getKey());
+            current++;
             samplingData.add(row);
         }
         return samplingData.toArray(new DataRow[samplingData.size()]);

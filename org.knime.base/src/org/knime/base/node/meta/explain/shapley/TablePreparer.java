@@ -78,13 +78,19 @@ class TablePreparer {
     /**
      * Creates the output spec for the loop start node.
      *
-     * @param inSpec input spec of the loop start node
      * @return output spec of the loop start node
      */
-    public DataTableSpec getLoopStartSpec(final DataTableSpec inSpec) {
+    public DataTableSpec getLoopStartSpec() {
+        return m_featureColManager.getTableSpec();
+    }
+
+    public void updateSpecs(final DataTableSpec inSpec) {
         m_featureColManager.updateColumnSet(inSpec);
         m_predictionColManager.updateColumnSet(inSpec);
-        return m_featureColManager.getTableSpec();
+    }
+
+    public boolean isValidSamplingSpec(final DataTableSpec samplingSpec) {
+        return m_featureColManager.containsColumns(samplingSpec);
     }
 
     /**

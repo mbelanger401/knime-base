@@ -63,7 +63,7 @@ import org.knime.core.node.util.filter.column.DataTypeColumnFilter;
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-class LoopStartSettings {
+class ShapleyValuesSettings {
 
     /**
      *
@@ -86,18 +86,32 @@ class LoopStartSettings {
 
     private int m_iterationsPerFeature = DEF_ITERATIONS_PER_FEATURE;
 
-    private long m_seed = new Random().nextLong();
+    private long m_seed = newSeed();
 
-    private DataColumnSpecFilterConfiguration m_featureCols = new DataColumnSpecFilterConfiguration(CFG_FEATURE_COLS);
+    private DataColumnSpecFilterConfiguration m_featureCols = createFeatureCols();
 
     private DataColumnSpecFilterConfiguration m_predictionCols =
-        new DataColumnSpecFilterConfiguration(CFG_PREDICTION_COLS, new DataTypeColumnFilter(DoubleValue.class));
+        createPredictionCols();
+
+    /**
+     * @return
+     */
+    private DataColumnSpecFilterConfiguration createPredictionCols() {
+        return new DataColumnSpecFilterConfiguration(CFG_PREDICTION_COLS, new DataTypeColumnFilter(DoubleValue.class));
+    }
+
+    private static long newSeed() {
+        return new Random().nextLong();
+    }
 
     public void loadSettingsDialog(final NodeSettingsRO settings, final DataTableSpec inSpec) {
         m_chunkSize = settings.getInt(CFG_CHUNK_SIZE, DEF_CHUNK_SIZE);
         m_iterationsPerFeature = settings.getInt(CFG_ITERATIONS_PER_FEATURE, DEF_ITERATIONS_PER_FEATURE);
         m_featureCols = createFeatureCols();
         m_featureCols.loadConfigurationInDialog(settings, inSpec);
+        m_predictionCols = createPredictionCols();
+        m_predictionCols.loadConfigurationInDialog(settings, inSpec);
+        m_seed = settings.getLong(CFG_SEED, newSeed());
     }
 
     private static DataColumnSpecFilterConfiguration createFeatureCols() {
@@ -110,6 +124,8 @@ class LoopStartSettings {
         m_featureCols = createFeatureCols();
         m_featureCols.loadConfigurationInModel(settings);
         m_seed = settings.getLong(CFG_SEED);
+        m_predictionCols = createPredictionCols();
+        m_predictionCols.loadConfigurationInModel(settings);
     }
 
     public void saveSettings(final NodeSettingsWO settings) {
@@ -118,6 +134,7 @@ class LoopStartSettings {
         settings.addInt(CFG_ITERATIONS_PER_FEATURE, m_iterationsPerFeature);
         m_featureCols.saveConfiguration(settings);
         settings.addLong(CFG_SEED, m_seed);
+        m_predictionCols.saveConfiguration(settings);
     }
 
     /**

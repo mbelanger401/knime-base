@@ -1,0 +1,6 @@
+autoEnabled=true
+eclipse.preferences.version=1
+extraProperties=
+fileExclusions=
+moduleKey=org.knime.core
+serverId=sonar.knime.org

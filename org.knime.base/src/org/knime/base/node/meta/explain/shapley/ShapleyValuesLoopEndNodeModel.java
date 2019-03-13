@@ -51,14 +51,7 @@ package org.knime.base.node.meta.explain.shapley;
 import java.io.File;
 import java.io.IOException;
 
-import org.knime.core.data.DataColumnSpec;
-import org.knime.core.data.DataColumnSpecCreator;
-import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.data.DataTableSpecCreator;
-import org.knime.core.data.container.CloseableRowIterator;
-import org.knime.core.data.def.DoubleCell;
-import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -90,8 +83,8 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
      */
     @Override
     protected DataTableSpec[] configure(final DataTableSpec[] inSpecs) throws InvalidSettingsException {
-        getLoopStart();
-        return new DataTableSpec[]{createOutSpec(inSpecs[0])};
+        final ShapleyValuesEstimator estimator = getEstimator();
+        return new DataTableSpec[]{estimator.createLoopEndSpec(inSpecs[0])};
     }
 
     private ShapleyValuesLoopStartNodeModel getLoopStart() throws InvalidSettingsException {
@@ -104,19 +97,6 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
         }
     }
 
-    // TODO this should perhaps be the responsibility of the estimator
-    private static DataTableSpec createOutSpec(final DataTableSpec inSpec) {
-        // TODO support multiple prediction targets
-        // TODO relax assumptions that prediction columns are in the end
-        final DataTableSpecCreator specCreator = new DataTableSpecCreator();
-        for (int i = 0; i < inSpec.getNumColumns() - 1; i++) {
-            final DataColumnSpec c = inSpec.getColumnSpec(i);
-            final DataColumnSpecCreator csr = new DataColumnSpecCreator(c.getName(), DoubleCell.TYPE);
-            specCreator.addColumns(csr.createSpec());
-        }
-        return specCreator.createSpec();
-    }
-
     /**
      * {@inheritDoc}
      */
@@ -125,20 +105,12 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
         throws Exception {
         // TODO implement progress
         final BufferedDataTable data = inData[0];
-        final ShapleyValueAlgorithm estimator = getEstimator();
-        final DataTableSpec outSpec = createOutSpec(data.getDataTableSpec());
-        final BufferedDataContainer container = exec.createDataContainer(outSpec);
-        try (final CloseableRowIterator iterator = data.iterator()) {
-                    while (iterator.hasNext()) {
-                        final DataRow shapleyValues = estimator.calculateShapleyValuesForNextRow(iterator);
-                        container.addRowToTable(shapleyValues);
-                    }
-        }
-        container.close();
-        return new BufferedDataTable[]{container.getTable()};
+        final ShapleyValuesEstimator estimator = getEstimator();
+        final BufferedDataTable result = estimator.executeLoopEnd(data, exec);
+        return new BufferedDataTable[]{result};
     }
 
-    private ShapleyValueAlgorithm getEstimator() throws InvalidSettingsException {
+    private ShapleyValuesEstimator getEstimator() throws InvalidSettingsException {
         return getLoopStart().getEstimator();
     }
 

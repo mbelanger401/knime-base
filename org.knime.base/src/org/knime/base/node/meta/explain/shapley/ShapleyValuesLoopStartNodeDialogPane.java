@@ -52,6 +52,7 @@ import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ActionEvent;
 import java.util.Random;
 
 import javax.swing.JButton;
@@ -99,7 +100,11 @@ public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
     }
 
     private void setupListeners() {
-        m_newSeedBtn.addActionListener(e -> m_seedBox.setText(new Random().nextLong() + ""));
+        m_newSeedBtn.addActionListener(this::reactToNewSeedBtnClick);
+    }
+
+    private void reactToNewSeedBtnClick(final ActionEvent e) {
+        m_seedBox.setText(new Random().nextLong() + "");
     }
 
     private void layout() {
@@ -137,13 +142,17 @@ public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
         addComponent(panel, gbc, "Chunk size", m_chunkSize);
 
         gbc.gridy++;
+        gbc.gridwidth = 1;
         gbc.gridx = 0;
         panel.add(new JLabel("Seed"), gbc);
         gbc.gridx++;
+        gbc.weightx = 1;
         panel.add(m_seedBox, gbc);
         gbc.gridx++;
+        gbc.weightx = 0;
         panel.add(m_newSeedBtn, gbc);
 
+        addTab("Options", panel);
     }
 
     private static void addComponent(final JPanel panel, final GridBagConstraints gbc, final String label,
@@ -162,7 +171,7 @@ public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
      */
     @Override
     protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
-        final LoopStartSettings cfg = new LoopStartSettings();
+        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
         m_featureColumns.saveConfiguration(cfg.getFeatureCols());
         m_predictionColumns.saveConfiguration(cfg.getPredictionCols());
         cfg.setIterationsPerFeature((int)m_iterationsPerFeature.getValue());
@@ -187,7 +196,7 @@ public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
     protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
         throws NotConfigurableException {
         final DataTableSpec inSpec = specs[0];
-        final LoopStartSettings cfg = new LoopStartSettings();
+        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
         cfg.loadSettingsDialog(settings, inSpec);
         m_featureColumns.loadConfiguration(cfg.getFeatureCols(), inSpec);
         m_predictionColumns.loadConfiguration(cfg.getPredictionCols(), inSpec);

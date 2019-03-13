@@ -50,11 +50,8 @@ package org.knime.base.node.meta.explain.shapley;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
-import org.knime.core.data.DataRow;
 import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.BufferedDataContainer;
 import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.CanceledExecutionException;
 import org.knime.core.node.ExecutionContext;
@@ -67,9 +64,9 @@ import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.workflow.LoopStartNodeTerminator;
 
 /**
- * Node Model of the start of a feature selection loop.
+ * Node Model of the start of a Shapley Values loop.
  *
- * @author Adrian Nembach, KNIME.com
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
 public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopStartNodeTerminator {
 
@@ -83,14 +80,14 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     private static final int SAMPLING_DATA_PORT_IDX = 1;
 
-    private ShapleyValueAlgorithm m_estimator;
+    private ShapleyValuesEstimator m_estimator;
 
-    private LoopStartSettings m_settings = new LoopStartSettings();
+    private ShapleyValuesSettings m_settings = new ShapleyValuesSettings();
 
     /**
      * @return the estimator used to create rows in the loop start node
      */
-    ShapleyValueAlgorithm getEstimator() {
+    ShapleyValuesEstimator getEstimator() {
         return m_estimator;
     }
 
@@ -115,16 +112,16 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
         final DataTableSpec roiSpec = inSpecs[ROI_PORT_IDX];
         final DataTableSpec samplingSpec = inSpecs[SAMPLING_DATA_PORT_IDX];
         checkCompatibility(roiSpec, samplingSpec);
-        return new DataTableSpec[]{roiSpec};
+        if (m_estimator == null) {
+            m_estimator = new ShapleyValuesEstimator(m_settings);
+        }
+        return new DataTableSpec[]{m_estimator.configureLoopStart(roiSpec, samplingSpec)};
     }
 
     private static void checkCompatibility(final DataTableSpec roiSpec, final DataTableSpec samplingSpec)
         throws InvalidSettingsException {
-        // TODO discuss if we should relax these restrictions
         CheckUtils.checkNotNull(roiSpec);
         CheckUtils.checkNotNull(samplingSpec);
-        CheckUtils.checkSetting(roiSpec.equalStructure(samplingSpec),
-            "The specs of the two input tables must be the same but were %s and %s.", roiSpec, samplingSpec);
     }
 
     /**
@@ -135,42 +132,8 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
         throws Exception {
         final BufferedDataTable roiTable = inData[ROI_PORT_IDX];
         final BufferedDataTable samplingTable = inData[SAMPLING_DATA_PORT_IDX];
-        initializeEstimator(samplingTable);
-
-        final BufferedDataContainer container = exec.createDataContainer(roiTable.getSpec());
-        // TODO implement progress
-        for (DataRow row : roiTable) {
-            final List<DataRow> rowBatch = m_estimator.prepareRow(row);
-            // TODO support chunking because these tables can get huge (2 * numRows * iterations)
-            rowBatch.forEach(container::addRowToTable);
-        }
-        container.close();
-
-        return new BufferedDataTable[]{container.getTable()};
-    }
-
-    private void initializeEstimator(final BufferedDataTable samplingTable) {
-        if (m_estimator != null) {
-            return;
-        }
-        FeatureReplacer fr = createFeatureReplacer(samplingTable);
-        // TODO support different values for iterations
-        // TODO support multiple targets
-        m_estimator = new ShapleyValueAlgorithm(fr, m_settings.getIterationsPerFeature(), 1);
-    }
-
-    /**
-     * @param samplingTable the table providing the rows for sampling
-     */
-    private static FeatureReplacer createFeatureReplacer(final BufferedDataTable samplingTable) {
-        DataRow[] dataArray = new DataRow[(int)samplingTable.size()];
-        int i = 0;
-        for (DataRow row : samplingTable) {
-            dataArray[i] = row;
-            i++;
-        }
-        // TODO implement seeding
-        return new FeatureReplacer(dataArray);
+        final BufferedDataTable result = m_estimator.executeLoopStart(roiTable, samplingTable, exec);
+        return new BufferedDataTable[]{result};
     }
 
     /**
@@ -213,7 +176,7 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     @Override
     protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-        final LoopStartSettings cfg = new LoopStartSettings();
+        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
         cfg.loadSettingsModel(settings);
     }
 
@@ -222,7 +185,7 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     @Override
     protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-        m_settings = new LoopStartSettings();
+        m_settings = new ShapleyValuesSettings();
         m_settings.loadSettingsModel(settings);
     }
 

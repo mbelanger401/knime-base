@@ -68,7 +68,7 @@ import org.knime.core.node.util.CheckUtils;
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public class ShapleyValueAlgorithm {
+public class ShapleyValuesAlgorithm {
 
     /**
     *
@@ -93,7 +93,7 @@ public class ShapleyValueAlgorithm {
      * @param iterationsPerFeature the number of iterations to perform per feature
      * @param numTargetCols the number of target columns
      */
-    public ShapleyValueAlgorithm(final FeatureReplacer featureReplacer, final int iterationsPerFeature,
+    public ShapleyValuesAlgorithm(final FeatureReplacer featureReplacer, final int iterationsPerFeature,
         final int numTargetCols) {
         CheckUtils.checkArgument(numTargetCols > 0, "At least one prediction column must be included.");
         CheckUtils.checkArgument(iterationsPerFeature > 0,
@@ -105,7 +105,7 @@ public class ShapleyValueAlgorithm {
     }
 
     List<DataRow> prepareRow(final DataRow row) {
-        final List<DataRow> rows = new ArrayList<>(2 * row.getNumCells() * m_iterationsPerFeature);
+        final List<DataRow> rows = new ArrayList<>(2 * m_featureReplacer.getFeatureCount() * m_iterationsPerFeature);
         final RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
         for (int i = 0; i < m_featureReplacer.getFeatureCount(); i++) {
             for (int j = 0; j < m_iterationsPerFeature; j++) {
@@ -121,8 +121,8 @@ public class ShapleyValueAlgorithm {
         final PeekingIterator<DataRow> iterator = new PeekingIterator<>(rows);
         final RowKey firstKey = iterator.peek().getKey();
         final RowKeyChecker checker = new RowKeyChecker(firstKey);
-        final double[] shapleyValues = calculateShapleyValues(iterator, checker);
-        return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues);
+        final ShapleyValues shapleyValues = calculateShapleyValues(iterator, checker);
+        return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues.getShapleyValues());
     }
 
     /**
@@ -130,17 +130,18 @@ public class ShapleyValueAlgorithm {
      * @param checker used to ensure that all rows in the current row batch belong together and are in the right order
      * @return a double array containing the Shapley Values
      */
-    private double[] calculateShapleyValues(final Iterator<DataRow> iterator, final RowKeyChecker checker) {
+    private ShapleyValues calculateShapleyValues(final Iterator<DataRow> iterator, final RowKeyChecker checker) {
         final int featureCount = m_featureReplacer.getFeatureCount();
-        final double[] shapleyValues = new double[featureCount];
+        final ShapleyValues shapleyValues = new ShapleyValues(featureCount, m_numTargetCols, m_iterationsPerFeature);
+        final DiffAccumulator diffAccumulator = new DiffAccumulator(m_numTargetCols);
         for (int i = 0; i < featureCount; i++) {
-            double currentShapleyValue = 0.0;
+            diffAccumulator.reset();
             for (int j = 0; j < m_iterationsPerFeature; j++) {
                 final DataRow foiIntact = iterator.next();
                 final DataRow foiReplaced = iterator.next();
                 checker.checkRowKey(foiIntact.getKey(), i, j, false);
                 checker.checkRowKey(foiReplaced.getKey(), i, j, true);
-                currentShapleyValue += getDifferenceInPredictions(foiIntact, foiReplaced);
+                diffAccumulator.update(foiIntact, foiReplaced);
                 if (!iterator.hasNext()) {
                     // Check if we expect to be at the end
                     CheckUtils.checkState(i == featureCount - 1, "Not all transformed rows arrived in the loop end.");
@@ -148,24 +149,75 @@ public class ShapleyValueAlgorithm {
                         "Not all transformed rows arrived in the loop end.");
                 }
             }
-            shapleyValues[i] = currentShapleyValue / m_iterationsPerFeature;
+            shapleyValues.updateValues(i, diffAccumulator);
         }
         return shapleyValues;
     }
 
-    private static double getDifferenceInPredictions(final DataRow foiReplaced, final DataRow foiIntact) {
-        // TODO generalize to cases with multiple predictions
-        return getPrediction(foiIntact) - getPrediction(foiReplaced);
+    private static class ShapleyValues {
+        private final double[] m_data;
+        private final int m_iterationsPerFeature;
+        private final int m_numTargets;
+
+        public ShapleyValues(final int numFeatures, final int numTargets, final int iterationsPerFeature) {
+            m_numTargets = numTargets;
+            m_iterationsPerFeature = iterationsPerFeature;
+            m_data = new double[numTargets * numFeatures];
+        }
+
+        private void set(final double value, final int featureIdx, final int targetIdx) {
+            m_data[flatIdx(featureIdx, targetIdx)] = value;
+        }
+
+        private static int flatIdx(final int featureIdx, final int targetIdx) {
+            return targetIdx * featureIdx + featureIdx;
+        }
+
+        public void updateValues(final int featureIdx, final DiffAccumulator accumulator) {
+            for (int i = 0; i < m_numTargets; i++) {
+                final double sv = accumulator.getAccumulatedDiff(i) / m_iterationsPerFeature;
+                set(sv, featureIdx, i);
+            }
+        }
+
+        public double[] getShapleyValues() {
+            // don't clone because we use the class only privately
+            return m_data;
+        }
+
     }
 
-    private static double getPrediction(final DataRow row) {
-        // TODO generalize to cases with multiple predictions
-        final DataCell targetCell = row.getCell(row.getNumCells() - 1);
-        if (targetCell instanceof DoubleValue) {
-            final DoubleValue val = (DoubleValue)targetCell;
-            return val.getDoubleValue();
-        } else {
-            throw new IllegalArgumentException("The prediction column of '" + row + "' is not numerical.");
+    private static class DiffAccumulator {
+        private final double[] m_data;
+
+        public DiffAccumulator(final int numTargets) {
+            m_data = new double[numTargets];
+        }
+
+        public void reset() {
+            Arrays.fill(m_data, 0);
+        }
+
+        public void update(final DataRow foiIntact, final DataRow foiReplaced) {
+            final int nCells = foiIntact.getNumCells();
+            assert nCells == m_data.length;
+            assert nCells == foiReplaced.getNumCells();
+            for (int i = 0; i < foiIntact.getNumCells(); i++) {
+                m_data[i] += getPrediction(foiIntact.getCell(i)) - getPrediction(foiReplaced.getCell(i));
+            }
+        }
+
+        private static double getPrediction(final DataCell cell) {
+            if (cell instanceof DoubleValue) {
+                final DoubleValue val = (DoubleValue)cell;
+                return val.getDoubleValue();
+            } else {
+                throw new IllegalArgumentException("A prediction column is not numerical.");
+            }
+        }
+
+        public double getAccumulatedDiff(final int targetIdx) {
+            return m_data[targetIdx];
         }
     }
 
