@@ -54,13 +54,8 @@ import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataTable;
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.data.DataTableSpecCreator;
-import org.knime.core.data.DoubleValue;
-import org.knime.core.data.container.ColumnRearranger;
 import org.knime.core.data.def.DoubleCell;
-import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.util.CheckUtils;
-import org.knime.core.node.util.filter.NameFilterConfiguration.FilterResult;
 import org.knime.core.node.util.filter.column.DataColumnSpecFilterConfiguration;
 
 /**
@@ -70,18 +65,14 @@ import org.knime.core.node.util.filter.column.DataColumnSpecFilterConfiguration;
  */
 class TablePreparer {
 
-    private final DataColumnSpecFilterConfiguration m_featureColsFilter;
+    private final ColumnSetManager m_featureColManager;
 
-    private final DataColumnSpecFilterConfiguration m_predictionColsFilter;
+    private final ColumnSetManager m_predictionColManager;
 
-    private String[] m_featureCols;
-
-    private String[] m_predictionCols;
-
-    public TablePreparer(final DataColumnSpecFilterConfiguration featureCols,
-        final DataColumnSpecFilterConfiguration predictionCols) {
-        m_featureColsFilter = featureCols;
-        m_predictionColsFilter = predictionCols;
+    public TablePreparer(final DataColumnSpecFilterConfiguration featureFilter,
+        final DataColumnSpecFilterConfiguration predictionFilter) {
+        m_featureColManager = new ColumnSetManager(featureFilter);
+        m_predictionColManager = new ColumnSetManager(predictionFilter);
     }
 
     /**
@@ -91,16 +82,14 @@ class TablePreparer {
      * @return output spec of the loop start node
      */
     public DataTableSpec getLoopStartSpec(final DataTableSpec inSpec) {
-        final FilterResult featureResult = m_featureColsFilter.applyTo(inSpec);
-        m_featureCols = featureResult.getIncludes();
-        m_predictionCols = m_predictionColsFilter.applyTo(inSpec).getIncludes();
-        final ColumnRearranger cr = new ColumnRearranger(inSpec);
-        cr.remove(featureResult.getExcludes());
-        return cr.createSpec();
+        m_featureColManager.updateColumnSet(inSpec);
+        m_predictionColManager.updateColumnSet(inSpec);
+        return m_featureColManager.getTableSpec();
     }
 
     /**
      * Creates the output spec for the loop end node.
+     *
      * @param inSpec the input table spec to the loop end
      *
      * @return output spec of the loop end node
@@ -109,9 +98,11 @@ class TablePreparer {
     public DataTableSpec getLoopEndSpec(final DataTableSpec inSpec) throws InvalidSettingsException {
         ensurePredictionColumnsAreValid(inSpec);
         final DataTableSpecCreator dtsc = new DataTableSpecCreator();
-        for (final String predictionCol : m_predictionCols) {
-            for (final String featureCol : m_featureCols) {
-                final String colName = createColumnName(predictionCol, featureCol);
+        final DataColumnSpec[] predCols = m_predictionColManager.getColumns();
+        final DataColumnSpec[] featureCols = m_featureColManager.getColumns();
+        for (final DataColumnSpec predCol : predCols) {
+            for (final DataColumnSpec featureCol : featureCols) {
+                final String colName = createColumnName(predCol.getName(), featureCol.getName());
                 final DataColumnSpecCreator c = new DataColumnSpecCreator(colName, DoubleCell.TYPE);
                 dtsc.addColumns(c.createSpec());
             }
@@ -120,12 +111,13 @@ class TablePreparer {
     }
 
     private void ensurePredictionColumnsAreValid(final DataTableSpec inSpec) throws InvalidSettingsException {
-        for (final String predictionCol : m_predictionCols) {
-            final DataColumnSpec spec = inSpec.getColumnSpec(predictionCol);
-            CheckUtils.checkSetting(spec != null, "The input table does not contain the prediction column '%s'.",
-                predictionCol);
-            CheckUtils.checkSetting(spec.getType().isCompatible(DoubleValue.class),
-                "The prediction column '%s' must be numeric.", predictionCol);
+        ensureColumnsAreContained(inSpec, m_predictionColManager, "prediction");
+    }
+
+    private static void ensureColumnsAreContained(final DataTableSpec inSpec, final ColumnSetManager mgr,
+        final String mgrPurpose) throws InvalidSettingsException {
+        if (!mgr.containsColumns(inSpec)) {
+            throw new InvalidSettingsException("The input table does not contain all " + mgrPurpose + " columns.");
         }
     }
 
@@ -138,9 +130,11 @@ class TablePreparer {
      *
      * @param table to prepare for perturbation
      * @return table containing only the feature columns
+     * @throws InvalidSettingsException if <B>table</b> does not contain all feature columns
      */
-    public DataTable prepareTableForPerturbation(final BufferedDataTable table) {
-        return filterTable(table, m_featureColsFilter);
+    public DataTable prepareTableForPerturbation(final DataTable table) throws InvalidSettingsException {
+        ensureColumnsAreContained(table.getDataTableSpec(), m_featureColManager, "feature");
+        return filterTable(table, m_featureColManager.getTableSpec());
     }
 
     /**
@@ -148,16 +142,23 @@ class TablePreparer {
      *
      * @param table to prepare for evaluation
      * @return table containing only the prediction columns
+     * @throws InvalidSettingsException if <b>table</b> does not contain all prediction columns
      */
-    public DataTable prepareTableForEvaluation(final BufferedDataTable table) {
+    public DataTable prepareTableForEvaluation(final DataTable table) throws InvalidSettingsException {
         final DataTableSpec tableSpec = table.getDataTableSpec();
-        return filterTable(table, m_predictionColsFilter);
+        ensurePredictionColumnsAreValid(tableSpec);
+        return filterTable(table, m_predictionColManager.getTableSpec());
     }
 
-    private static DataTable filterTable(final BufferedDataTable table,
-        final DataColumnSpecFilterConfiguration filter) {
-        final FilterResult fr = filter.applyTo(table.getDataTableSpec());
-        return new FilterColumnTable(table, fr.getExcludes());
+    public int getNumPredictionColumns() {
+        return m_predictionColManager.getNumColumns();
+    }
+
+    private static DataTable filterTable(final DataTable table, final DataTableSpec desiredSpec) {
+        final DataTableSpec incomingSpec = table.getDataTableSpec();
+        final int[] includes =
+            desiredSpec.stream().map(DataColumnSpec::getName).mapToInt(incomingSpec::findColumnIndex).toArray();
+        return new FilterColumnTable(table, true, includes);
     }
 
 }

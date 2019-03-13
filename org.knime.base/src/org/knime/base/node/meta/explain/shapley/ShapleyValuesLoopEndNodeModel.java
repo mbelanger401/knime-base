@@ -125,7 +125,7 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
         throws Exception {
         // TODO implement progress
         final BufferedDataTable data = inData[0];
-        final ShapleyValueEstimator estimator = getEstimator();
+        final ShapleyValueAlgorithm estimator = getEstimator();
         final DataTableSpec outSpec = createOutSpec(data.getDataTableSpec());
         final BufferedDataContainer container = exec.createDataContainer(outSpec);
         try (final CloseableRowIterator iterator = data.iterator()) {
@@ -138,7 +138,7 @@ public class ShapleyValuesLoopEndNodeModel extends NodeModel implements LoopEndN
         return new BufferedDataTable[]{container.getTable()};
     }
 
-    private ShapleyValueEstimator getEstimator() throws InvalidSettingsException {
+    private ShapleyValueAlgorithm getEstimator() throws InvalidSettingsException {
         return getLoopStart().getEstimator();
     }
 

@@ -48,18 +48,27 @@
  */
 package org.knime.base.node.meta.explain.shapley;
 
+import java.util.Random;
+
 import org.knime.core.data.DataTableSpec;
+import org.knime.core.data.DoubleValue;
 import org.knime.core.node.InvalidSettingsException;
 import org.knime.core.node.NodeSettingsRO;
 import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.util.CheckUtils;
 import org.knime.core.node.util.filter.column.DataColumnSpecFilterConfiguration;
+import org.knime.core.node.util.filter.column.DataTypeColumnFilter;
 
 /**
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
 class LoopStartSettings {
+
+    /**
+     *
+     */
+    private static final String CFG_SEED = "seed";
 
     private static final String CFG_FEATURE_COLS = "featureColumns";
 
@@ -77,14 +86,12 @@ class LoopStartSettings {
 
     private int m_iterationsPerFeature = DEF_ITERATIONS_PER_FEATURE;
 
+    private long m_seed = new Random().nextLong();
+
     private DataColumnSpecFilterConfiguration m_featureCols = new DataColumnSpecFilterConfiguration(CFG_FEATURE_COLS);
 
-
-    private DataColumnSpecFilterConfiguration m_predictionCols = createPredictionCols();
-
-    private static DataColumnSpecFilterConfiguration createPredictionCols() {
-        return new DataColumnSpecFilterConfiguration(CFG_PREDICTION_COLS);
-    }
+    private DataColumnSpecFilterConfiguration m_predictionCols =
+        new DataColumnSpecFilterConfiguration(CFG_PREDICTION_COLS, new DataTypeColumnFilter(DoubleValue.class));
 
     public void loadSettingsDialog(final NodeSettingsRO settings, final DataTableSpec inSpec) {
         m_chunkSize = settings.getInt(CFG_CHUNK_SIZE, DEF_CHUNK_SIZE);
@@ -93,17 +100,16 @@ class LoopStartSettings {
         m_featureCols.loadConfigurationInDialog(settings, inSpec);
     }
 
-
     private static DataColumnSpecFilterConfiguration createFeatureCols() {
         return new DataColumnSpecFilterConfiguration(CFG_FEATURE_COLS);
     }
-
 
     public void loadSettingsModel(final NodeSettingsRO settings) throws InvalidSettingsException {
         m_chunkSize = settings.getInt(CFG_CHUNK_SIZE);
         m_iterationsPerFeature = settings.getInt(CFG_ITERATIONS_PER_FEATURE);
         m_featureCols = createFeatureCols();
         m_featureCols.loadConfigurationInModel(settings);
+        m_seed = settings.getLong(CFG_SEED);
     }
 
     public void saveSettings(final NodeSettingsWO settings) {
@@ -111,6 +117,7 @@ class LoopStartSettings {
         settings.addInt(CFG_CHUNK_SIZE, m_chunkSize);
         settings.addInt(CFG_ITERATIONS_PER_FEATURE, m_iterationsPerFeature);
         m_featureCols.saveConfiguration(settings);
+        settings.addLong(CFG_SEED, m_seed);
     }
 
     /**
@@ -167,6 +174,20 @@ class LoopStartSettings {
      */
     void setPredictionCols(final DataColumnSpecFilterConfiguration predictionCols) {
         m_predictionCols = predictionCols;
+    }
+
+    /**
+     * @return the seed
+     */
+    long getSeed() {
+        return m_seed;
+    }
+
+    /**
+     * @param seed the seed to set
+     */
+    void setSeed(final long seed) {
+        m_seed = seed;
     }
 
 }

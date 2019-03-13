@@ -83,12 +83,14 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     private static final int SAMPLING_DATA_PORT_IDX = 1;
 
-    private ShapleyValueEstimator m_estimator;
+    private ShapleyValueAlgorithm m_estimator;
+
+    private LoopStartSettings m_settings = new LoopStartSettings();
 
     /**
      * @return the estimator used to create rows in the loop start node
      */
-    ShapleyValueEstimator getEstimator() {
+    ShapleyValueAlgorithm getEstimator() {
         return m_estimator;
     }
 
@@ -154,7 +156,7 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
         FeatureReplacer fr = createFeatureReplacer(samplingTable);
         // TODO support different values for iterations
         // TODO support multiple targets
-        m_estimator = new ShapleyValueEstimator(fr, 1000, 1);
+        m_estimator = new ShapleyValueAlgorithm(fr, m_settings.getIterationsPerFeature(), 1);
     }
 
     /**
@@ -203,7 +205,7 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     @Override
     protected void saveSettingsTo(final NodeSettingsWO settings) {
-        // TODO
+        m_settings.saveSettings(settings);
     }
 
     /**
@@ -211,7 +213,8 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     @Override
     protected void validateSettings(final NodeSettingsRO settings) throws InvalidSettingsException {
-        // TODO
+        final LoopStartSettings cfg = new LoopStartSettings();
+        cfg.loadSettingsModel(settings);
     }
 
     /**
@@ -219,7 +222,8 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
      */
     @Override
     protected void loadValidatedSettingsFrom(final NodeSettingsRO settings) throws InvalidSettingsException {
-        // TODO
+        m_settings = new LoopStartSettings();
+        m_settings.loadSettingsModel(settings);
     }
 
     /**

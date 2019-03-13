@@ -44,59 +44,89 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   07.03.2019 (adrian): created
+ *   13.03.2019 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.base.node.meta.explain.shapley;
 
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeFactory;
-import org.knime.core.node.NodeView;
+import java.util.Arrays;
+
+import org.knime.core.data.DataColumnSpec;
+import org.knime.core.data.DataTableSpec;
+import org.knime.core.node.util.CheckUtils;
+import org.knime.core.node.util.filter.NameFilterConfiguration.FilterResult;
+import org.knime.core.node.util.filter.column.DataColumnSpecFilterConfiguration;
 
 /**
  *
  * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public class ShapleyValuesLoopStartNodeFactory extends NodeFactory<ShapleyValuesLoopStartNodeModel> {
+class ColumnSetManager {
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public ShapleyValuesLoopStartNodeModel createNodeModel() {
-        return new ShapleyValuesLoopStartNodeModel();
+    private final DataColumnSpecFilterConfiguration m_filterCfg;
+
+    private DataColumnSpec[] m_cols;
+
+    public ColumnSetManager(final DataColumnSpecFilterConfiguration colFilterCfg) {
+        m_filterCfg = colFilterCfg;
     }
 
     /**
-     * {@inheritDoc}
+     * Updates this instance's managed columns using the filter specified in the constructor.
+     * @param inSpec {@link DataTableSpec} from which to extract columns to manage
      */
-    @Override
-    protected int getNrNodeViews() {
-        return 0;
+    public void updateColumnSet(final DataTableSpec inSpec) {
+        final FilterResult fr = m_filterCfg.applyTo(inSpec);
+        updateColumnSet(fr.getIncludes(), inSpec);
+    }
+
+    private void updateColumnSet(final String[] includes, final DataTableSpec spec) {
+        m_cols = Arrays.stream(includes).map(spec::getColumnSpec).toArray(DataColumnSpec[]::new);
+    }
+
+    public DataTableSpec getTableSpec() {
+        hasBeenUpdated();
+        return new DataTableSpec(m_cols);
+    }
+
+    public DataColumnSpec[] getColumns() {
+        hasBeenUpdated();
+        return m_cols.clone();
+    }
+
+    private void hasBeenUpdated() {
+        CheckUtils.checkState(m_cols != null,
+            "This ColumnSetManager has not been updated with a DataColumnSpec. "
+            + "Update must be called at least once before any other method can be accessed.");
     }
 
     /**
-     * {@inheritDoc}
+     * Checks if the provided {@link DataColumnSpec spec} contains the columns this instance manages.
+     * @param spec DataTableSpec to check for containment
+     * @return true if all columns are contained in {@link DataColumnSpec spec}
      */
-    @Override
-    public NodeView<ShapleyValuesLoopStartNodeModel> createNodeView(final int viewIndex,
-        final ShapleyValuesLoopStartNodeModel nodeModel) {
-        return null;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected boolean hasDialog() {
+    public boolean containsColumns(final DataTableSpec spec) {
+        hasBeenUpdated();
+        for (final DataColumnSpec colSpec : m_cols) {
+            if (!contains(colSpec, spec)) {
+                return false;
+            }
+        }
         return true;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected NodeDialogPane createNodeDialogPane() {
-        return new ShapleyValuesLoopStartNodeDialogPane();
+    private static boolean contains(final DataColumnSpec col, final DataTableSpec spec) {
+        final String name = col.getName();
+        if (spec.containsName(name)) {
+            final DataColumnSpec incoming = spec.getColumnSpec(name);
+            if (col.getType().isASuperTypeOf(incoming.getType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public int getNumColumns() {
+        return m_cols.length;
     }
 
 }
