@@ -52,9 +52,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import org.knime.base.node.meta.explain.shapley.FeatureReplacer.ReplacementResult;
+import org.knime.base.node.meta.explain.shapley.KeyGeneratorFactory.RowKeyChecker;
+import org.knime.base.node.meta.explain.shapley.KeyGeneratorFactory.RowKeyGenerator;
 import org.knime.core.data.DataCell;
 import org.knime.core.data.DataRow;
 import org.knime.core.data.DoubleValue;
@@ -70,20 +72,14 @@ import org.knime.core.node.util.CheckUtils;
  */
 public class ShapleyValuesAlgorithm {
 
-    /**
-    *
-    */
-    private static final String DELIMITER = "_";
-
-    private static final String FOI_REPLACED = "t";
-
-    private static final String FOI_NOT_REPLACED = "f";
-
     private final FeatureReplacer m_featureReplacer;
 
     private final int m_iterationsPerFeature;
 
     private final int m_numTargetCols;
+
+    private static final KeyGeneratorFactory<RowKey, SVId> KEY_GEN_FAC =
+        new ShapleyValuesKeyGeneratorFactory<>(RowKey::new, RowKey::getString);
 
     /**
      * Estimates the Shapley Values using algorithm 1 proposed by Strumbelj and Kononenko in their paper "Explaining
@@ -106,12 +102,17 @@ public class ShapleyValuesAlgorithm {
 
     List<DataRow> prepareRow(final DataRow row) {
         final List<DataRow> rows = new ArrayList<>(2 * m_featureReplacer.getFeatureCount() * m_iterationsPerFeature);
-        final RowKeyGenerator keyGen = new RowKeyGenerator(row.getKey());
+        final RowKeyGenerator<RowKey, SVId> keyGen = KEY_GEN_FAC.createGenerator(row.getKey());
+        final SVId svId = new SVId(0, 0, false);
         for (int i = 0; i < m_featureReplacer.getFeatureCount(); i++) {
+            svId.setFeatureIdx(i);
             for (int j = 0; j < m_iterationsPerFeature; j++) {
                 final ReplacementResult r = m_featureReplacer.replaceFeatures(row, i);
-                rows.add(new DefaultRow(keyGen.createKey(i, j, false), r.getFoiIntact()));
-                rows.add(new DefaultRow(keyGen.createKey(i, j, true), r.getFoiReplaced()));
+                svId.setIteration(j);
+                svId.setFoiIntact(true);
+                rows.add(new DefaultRow(keyGen.create(svId), r.getFoiIntact()));
+                svId.setFoiIntact(false);
+                rows.add(new DefaultRow(keyGen.create(svId), r.getFoiReplaced()));
             }
         }
         return rows;
@@ -120,9 +121,15 @@ public class ShapleyValuesAlgorithm {
     DataRow calculateShapleyValuesForNextRow(final Iterator<DataRow> rows) {
         final PeekingIterator<DataRow> iterator = new PeekingIterator<>(rows);
         final RowKey firstKey = iterator.peek().getKey();
-        final RowKeyChecker checker = new RowKeyChecker(firstKey);
+        final RowKeyChecker<RowKey, SVId> checker = KEY_GEN_FAC.createChecker(firstKey);
         final ShapleyValues shapleyValues = calculateShapleyValues(iterator, checker);
         return new DefaultRow(new RowKey(checker.getOriginalKey()), shapleyValues.getShapleyValues());
+    }
+
+    private ShapleyValues calculateShapleyValues(final Iterator<DataRow> iterator,
+        final RowKeyChecker<RowKey, SVId> checker) {
+        final int[] allFeatures = IntStream.range(0, m_featureReplacer.getFeatureCount()).toArray();
+        return calculateShapleyValues(iterator, checker, allFeatures);
     }
 
     /**
@@ -130,17 +137,23 @@ public class ShapleyValuesAlgorithm {
      * @param checker used to ensure that all rows in the current row batch belong together and are in the right order
      * @return a double array containing the Shapley Values
      */
-    private ShapleyValues calculateShapleyValues(final Iterator<DataRow> iterator, final RowKeyChecker checker) {
+    private ShapleyValues calculateShapleyValues(final Iterator<DataRow> iterator,
+        final RowKeyChecker<RowKey, SVId> checker, final int[] features) {
         final int featureCount = m_featureReplacer.getFeatureCount();
         final ShapleyValues shapleyValues = new ShapleyValues(featureCount, m_numTargetCols, m_iterationsPerFeature);
         final DiffAccumulator diffAccumulator = new DiffAccumulator(m_numTargetCols);
-        for (int i = 0; i < featureCount; i++) {
+        final SVId svId = new SVId();
+        for (int i : features) {
             diffAccumulator.reset();
+            svId.setFeatureIdx(i);
             for (int j = 0; j < m_iterationsPerFeature; j++) {
                 final DataRow foiIntact = iterator.next();
                 final DataRow foiReplaced = iterator.next();
-                checker.checkRowKey(foiIntact.getKey(), i, j, false);
-                checker.checkRowKey(foiReplaced.getKey(), i, j, true);
+                svId.setIteration(j);
+                svId.setFoiIntact(true);
+                checker.check(foiIntact.getKey(), svId);
+                svId.setFoiIntact(false);
+                checker.check(foiReplaced.getKey(), svId);
                 diffAccumulator.update(foiIntact, foiReplaced);
                 if (!iterator.hasNext()) {
                     // Check if we expect to be at the end
@@ -156,10 +169,12 @@ public class ShapleyValuesAlgorithm {
 
     private static class ShapleyValues {
         private final double[] m_data;
+
         private final int m_iterationsPerFeature;
+
         private final int m_numTargets;
 
-        public ShapleyValues(final int numFeatures, final int numTargets, final int iterationsPerFeature) {
+        ShapleyValues(final int numFeatures, final int numTargets, final int iterationsPerFeature) {
             m_numTargets = numTargets;
             m_iterationsPerFeature = iterationsPerFeature;
             m_data = new double[numTargets * numFeatures];
@@ -173,14 +188,21 @@ public class ShapleyValuesAlgorithm {
             return targetIdx * featureIdx + featureIdx;
         }
 
-        public void updateValues(final int featureIdx, final DiffAccumulator accumulator) {
+        /**
+         * Normalizes the accumulated values in <b>accumulator</b>, normalizes them and updates the Shapley Values of
+         * all targets for the current feature.
+         *
+         * @param featureIdx index of the current feature
+         * @param accumulator contains the accumulated differences of all iterations for the current feature
+         */
+        void updateValues(final int featureIdx, final DiffAccumulator accumulator) {
             for (int i = 0; i < m_numTargets; i++) {
                 final double sv = accumulator.getAccumulatedDiff(i) / m_iterationsPerFeature;
                 set(sv, featureIdx, i);
             }
         }
 
-        public double[] getShapleyValues() {
+        double[] getShapleyValues() {
             // don't clone because we use the class only privately
             return m_data;
         }
@@ -190,15 +212,23 @@ public class ShapleyValuesAlgorithm {
     private static class DiffAccumulator {
         private final double[] m_data;
 
-        public DiffAccumulator(final int numTargets) {
+        DiffAccumulator(final int numTargets) {
             m_data = new double[numTargets];
         }
 
-        public void reset() {
+        void reset() {
             Arrays.fill(m_data, 0);
         }
 
-        public void update(final DataRow foiIntact, final DataRow foiReplaced) {
+        /**
+         * Calculates the difference in predictions for <b>foiIntact</b> and <b>foiReplaced</b>. </br>
+         * Both input parameters are expected to consist only of the predictions i.e. no features should be contained in
+         * the rows.
+         *
+         * @param foiIntact predictions for row with the feature of interest intact
+         * @param foiReplaced predictions for row with the feature of interest replaced
+         */
+        void update(final DataRow foiIntact, final DataRow foiReplaced) {
             final int nCells = foiIntact.getNumCells();
             assert nCells == m_data.length;
             assert nCells == foiReplaced.getNumCells();
@@ -212,142 +242,14 @@ public class ShapleyValuesAlgorithm {
                 final DoubleValue val = (DoubleValue)cell;
                 return val.getDoubleValue();
             } else {
+                // can only happen if a numerical column contains a non numerical cell i.e. never
                 throw new IllegalArgumentException("A prediction column is not numerical.");
             }
         }
 
-        public double getAccumulatedDiff(final int targetIdx) {
+        double getAccumulatedDiff(final int targetIdx) {
             return m_data[targetIdx];
         }
-    }
-
-    private static class RowKeyChecker {
-        /**
-         * The number of components that the row key generator adds to the original row key
-         */
-        private static final int NUM_ADDITIONAL_COMPONENTS = 3;
-
-        /**
-         * Distance of the iteration component from the end of a generated row key
-         */
-        private static final int POS_ITERATION = 2;
-
-        /**
-         * Minimal number of components of a generated row key
-         */
-        private static final int MIN_COMPONENTS_PER_KEY = 4;
-
-        /**
-         * Distance of the feature index component from the end of the split row key
-         */
-        private static final int POS_FEATURE_IDX = 3;
-
-        private final String m_originalKey;
-
-        /**
-         * Checks if a row belongs to the current batch. </br>
-         * Has to be initialized with the {@link RowKey} of the first row in the batch. Fails if the first row key does
-         * not designate the start of a row batch.
-         *
-         * @param keyOfFirstRowInBatch the row key of the first row in the current row batch
-         */
-        public RowKeyChecker(final RowKey keyOfFirstRowInBatch) {
-            final RowKey key = keyOfFirstRowInBatch;
-            final String[] split = split(key);
-            int featureIdx = -1;
-            int iteration = -1;
-            try {
-                featureIdx = parseFeatureIdx(split);
-                iteration = parseIteration(split);
-            } catch (NumberFormatException ex) {
-                throw new IllegalArgumentException(createErrorString(key));
-            }
-            CheckUtils.checkArgument(featureIdx == 0 && iteration == 0,
-                "The row with key '" + key + "' is not the first row in a row batch.");
-            m_originalKey = recreateOriginalKey(split);
-        }
-
-        public String getOriginalKey() {
-            return m_originalKey;
-        }
-
-        private static String createErrorString(final RowKey generatedKey) {
-            return "The row key '" + generatedKey + "' was not created by an instance of this RowKeyGenerator.";
-        }
-
-        /**
-         * @param split
-         * @return
-         */
-        private static int parseIteration(final String[] split) {
-            return Integer.parseInt(split[split.length - POS_ITERATION]);
-        }
-
-        private static int parseFeatureIdx(final String[] split) {
-            return Integer.parseInt(split[split.length - POS_FEATURE_IDX]);
-        }
-
-        private static String[] split(final RowKey key) {
-            final String[] split = key.getString().split(DELIMITER);
-            CheckUtils.checkArgument(split.length >= MIN_COMPONENTS_PER_KEY, createErrorString(key));
-            return split;
-        }
-
-        private static String recreateOriginalKey(final String[] split) {
-            // TODO figure out if there is a more efficient way to do this
-            return Arrays.stream(split, 0, split.length - NUM_ADDITIONAL_COMPONENTS)
-                .collect(Collectors.joining(DELIMITER));
-        }
-
-        private static boolean isFoiReplaced(final String[] split) {
-            return split[split.length - 1].equals(FOI_REPLACED);
-        }
-
-        /**
-         * Checks whether the provided <b>key</b> belongs to the row that is currently expected.
-         *
-         * @param key to check
-         * @param expectedFeatureIdx the feature index the current row should have
-         * @param expectedIteration iteration the current row should have
-         * @param withFoiReplaced whether the FOI should be replaced in the current row
-         */
-        public void checkRowKey(final RowKey key, final int expectedFeatureIdx, final int expectedIteration,
-            final boolean withFoiReplaced) {
-            final String[] split = split(key);
-            final String originalKey = recreateOriginalKey(split);
-            CheckUtils.checkArgument(m_originalKey.equals(originalKey),
-                "The row with key '" + key + "' does not belong to the current batch of rows.");
-            CheckUtils.checkArgument(isRightOrder(expectedFeatureIdx, expectedIteration, withFoiReplaced, split),
-                "The rows corresponding to the original row key '" + m_originalKey
-                    + "' are not in the expected order.");
-        }
-
-        private static boolean isRightOrder(final int expectedFeatureIdx, final int expectedIteration,
-            final boolean expectFoiReplaced, final String[] split) {
-            return expectedFeatureIdx == parseFeatureIdx(split) && expectedIteration == parseIteration(split)
-                && isFoiReplaced(split) == expectFoiReplaced;
-        }
-    }
-
-    private static class RowKeyGenerator {
-
-        private String m_originalKey;
-
-        private RowKeyGenerator(final RowKey originalKey) {
-            m_originalKey = originalKey.getString();
-        }
-
-        RowKey createKey(final int featureIdx, final int iteration, final boolean withFoiReplaced) {
-            StringBuilder sb = new StringBuilder(m_originalKey);
-            sb.append(DELIMITER);
-            sb.append(featureIdx);
-            sb.append(DELIMITER);
-            sb.append(iteration);
-            sb.append(DELIMITER);
-            sb.append(withFoiReplaced ? FOI_REPLACED : FOI_NOT_REPLACED);
-            return new RowKey(sb.toString());
-        }
-
     }
 
 }

@@ -68,6 +68,11 @@ class ShapleyValuesSettings {
     /**
      *
      */
+    private static final String CFG_USE_SEED = "useSeed";
+
+    /**
+     *
+     */
     private static final String CFG_SEED = "seed";
 
     private static final String CFG_FEATURE_COLS = "featureColumns";
@@ -87,6 +92,8 @@ class ShapleyValuesSettings {
     private int m_iterationsPerFeature = DEF_ITERATIONS_PER_FEATURE;
 
     private long m_seed = newSeed();
+
+    private boolean m_useSeed = false;
 
     private DataColumnSpecFilterConfiguration m_featureCols = createFeatureCols();
 
@@ -112,6 +119,7 @@ class ShapleyValuesSettings {
         m_predictionCols = createPredictionCols();
         m_predictionCols.loadConfigurationInDialog(settings, inSpec);
         m_seed = settings.getLong(CFG_SEED, newSeed());
+        m_useSeed = settings.getBoolean(CFG_USE_SEED, false);
     }
 
     private static DataColumnSpecFilterConfiguration createFeatureCols() {
@@ -126,6 +134,7 @@ class ShapleyValuesSettings {
         m_seed = settings.getLong(CFG_SEED);
         m_predictionCols = createPredictionCols();
         m_predictionCols.loadConfigurationInModel(settings);
+        m_useSeed = settings.getBoolean(CFG_USE_SEED);
     }
 
     public void saveSettings(final NodeSettingsWO settings) {
@@ -135,6 +144,7 @@ class ShapleyValuesSettings {
         m_featureCols.saveConfiguration(settings);
         settings.addLong(CFG_SEED, m_seed);
         m_predictionCols.saveConfiguration(settings);
+        settings.addBoolean(CFG_USE_SEED, m_useSeed);
     }
 
     /**
@@ -197,7 +207,7 @@ class ShapleyValuesSettings {
      * @return the seed
      */
     long getSeed() {
-        return m_seed;
+        return m_useSeed ? m_seed : newSeed();
     }
 
     /**
@@ -205,6 +215,20 @@ class ShapleyValuesSettings {
      */
     void setSeed(final long seed) {
         m_seed = seed;
+    }
+
+    /**
+     * @return the useSeed
+     */
+    boolean getUseSeed() {
+        return m_useSeed;
+    }
+
+    /**
+     * @param useSeed the useSeed to set
+     */
+    void setUseSeed(final boolean useSeed) {
+        m_useSeed = useSeed;
     }
 
 }

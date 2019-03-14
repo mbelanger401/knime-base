@@ -44,59 +44,66 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   15.03.2016 (adrian): created
+ *   14.03.2019 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.base.node.meta.explain.shapley;
 
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
+
 import org.knime.core.data.DataTableSpec;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
 import org.knime.core.node.NotConfigurableException;
 
 /**
  *
- * @author Adrian Nembach, KNIME.com
- * @author Simon Schmid, KNIME, Austin, USA
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
+public class AdvancedOptionsDialog {
 
-    // General components
 
-    private final OptionsDialog m_options = new OptionsDialog();
+    private final JSpinner m_chunkSize = new JSpinner(new SpinnerNumberModel(100, 1, Integer.MAX_VALUE, 1));
 
-    private final AdvancedOptionsDialog m_advancedOptions = new AdvancedOptionsDialog();
     /**
      *
      */
-    public ShapleyValuesLoopStartNodeDialogPane() {
-        addTab("Options", m_options.getPanel());
-        addTab("Advanced Options", m_advancedOptions.getPanel());
+    public AdvancedOptionsDialog() {
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        m_options.saveSettingsTo(cfg);
-        m_advancedOptions.saveSettingsTo(cfg);
-        cfg.saveSettings(settings);
+
+    JPanel getPanel() {
+        // === Options Tab ===
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.weightx = 1;
+        gbc.weighty = 0;
+        gbc.fill = GridBagConstraints.BOTH;
+
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+
+        panel.add(new JLabel("Chunk size"), gbc);
+        gbc.gridx++;
+        panel.add(m_chunkSize, gbc);
+        return panel;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
+
+    void saveSettingsTo(final ShapleyValuesSettings cfg) throws InvalidSettingsException {
+        cfg.setChunkSize((int)m_chunkSize.getValue());
+    }
+
+    void loadSettingsFrom(final ShapleyValuesSettings cfg, final DataTableSpec inSpec)
         throws NotConfigurableException {
-        final DataTableSpec inSpec = specs[0];
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        cfg.loadSettingsDialog(settings, inSpec);
-        m_options.loadSettingsFrom(cfg, inSpec);
-        m_advancedOptions.loadSettingsFrom(cfg, inSpec);
+        m_chunkSize.setValue(cfg.getChunkSize());
     }
-
 }

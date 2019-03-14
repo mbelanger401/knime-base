@@ -114,6 +114,15 @@ class ColumnSetManager {
         return true;
     }
 
+    public void checkColumnsContained(final DataTableSpec spec) throws MissingColumnException {
+        hasBeenUpdated();
+        for (final DataColumnSpec colSpec : m_cols) {
+            if (!contains(colSpec, spec)) {
+                throw new MissingColumnException(colSpec);
+            }
+        }
+    }
+
     private static boolean contains(final DataColumnSpec col, final DataTableSpec spec) {
         final String name = col.getName();
         if (spec.containsName(name)) {
@@ -127,6 +136,27 @@ class ColumnSetManager {
 
     public int getNumColumns() {
         return m_cols.length;
+    }
+
+    static class MissingColumnException extends Throwable {
+        /**
+         *
+         */
+        private static final long serialVersionUID = 1L;
+        private final DataColumnSpec m_missingCol;
+
+        public MissingColumnException(final DataColumnSpec missingCol) {
+            m_missingCol = missingCol;
+        }
+
+        /**
+         * @return the missingCol
+         */
+        DataColumnSpec getMissingCol() {
+            return m_missingCol;
+        }
+
+
     }
 
 }

@@ -44,59 +44,28 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   15.03.2016 (adrian): created
+ *   14.03.2019 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.base.node.meta.explain.shapley;
 
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
-import org.knime.core.node.NotConfigurableException;
-
 /**
  *
- * @author Adrian Nembach, KNIME.com
- * @author Simon Schmid, KNIME, Austin, USA
+ * @author Adrian Nembach, KNIME GmbH, Konstanz, Germany
  */
-public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
+interface KeyGeneratorFactory<K, T> {
 
-    // General components
-
-    private final OptionsDialog m_options = new OptionsDialog();
-
-    private final AdvancedOptionsDialog m_advancedOptions = new AdvancedOptionsDialog();
-    /**
-     *
-     */
-    public ShapleyValuesLoopStartNodeDialogPane() {
-        addTab("Options", m_options.getPanel());
-        addTab("Advanced Options", m_advancedOptions.getPanel());
+    interface RowKeyGenerator<K, T> {
+        K create(final T identificator);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        m_options.saveSettingsTo(cfg);
-        m_advancedOptions.saveSettingsTo(cfg);
-        cfg.saveSettings(settings);
+    interface RowKeyChecker<K, T> {
+        boolean check(final K key, T expectedIdentificator);
+
+        String getOriginalKey();
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
-        throws NotConfigurableException {
-        final DataTableSpec inSpec = specs[0];
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        cfg.loadSettingsDialog(settings, inSpec);
-        m_options.loadSettingsFrom(cfg, inSpec);
-        m_advancedOptions.loadSettingsFrom(cfg, inSpec);
-    }
+    RowKeyGenerator<K, T> createGenerator(K originalKey);
+
+    RowKeyChecker<K, T> createChecker(K firstKeyInBatch);
 
 }

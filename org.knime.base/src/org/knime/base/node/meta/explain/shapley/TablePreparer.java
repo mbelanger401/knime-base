@@ -49,6 +49,7 @@
 package org.knime.base.node.meta.explain.shapley;
 
 import org.knime.base.data.filter.column.FilterColumnTable;
+import org.knime.base.node.meta.explain.shapley.ColumnSetManager.MissingColumnException;
 import org.knime.core.data.DataColumnSpec;
 import org.knime.core.data.DataColumnSpecCreator;
 import org.knime.core.data.DataTable;
@@ -65,9 +66,9 @@ import org.knime.core.node.util.filter.column.DataColumnSpecFilterConfiguration;
  */
 class TablePreparer {
 
-    private final ColumnSetManager m_featureColManager;
+    private ColumnSetManager m_featureColManager;
 
-    private final ColumnSetManager m_predictionColManager;
+    private ColumnSetManager m_predictionColManager;
 
     public TablePreparer(final DataColumnSpecFilterConfiguration featureFilter,
         final DataColumnSpecFilterConfiguration predictionFilter) {
@@ -84,13 +85,21 @@ class TablePreparer {
         return m_featureColManager.getTableSpec();
     }
 
-    public void updateSpecs(final DataTableSpec inSpec) {
+    public void updateSpecs(final DataTableSpec inSpec, final DataColumnSpecFilterConfiguration featureFilter,
+        final DataColumnSpecFilterConfiguration predictionFilter) {
+        m_featureColManager = new ColumnSetManager(featureFilter);
+        m_predictionColManager = new ColumnSetManager(predictionFilter);
         m_featureColManager.updateColumnSet(inSpec);
         m_predictionColManager.updateColumnSet(inSpec);
     }
 
-    public boolean isValidSamplingSpec(final DataTableSpec samplingSpec) {
-        return m_featureColManager.containsColumns(samplingSpec);
+    public void checkSamplingSpec(final DataTableSpec samplingSpec) throws InvalidSettingsException {
+        try {
+            m_featureColManager.checkColumnsContained(samplingSpec);
+        } catch (MissingColumnException e) {
+            throw new InvalidSettingsException(
+                "THe sampling table misses the feature column " + e.getMissingCol() + ".", e);
+        }
     }
 
     /**
@@ -128,7 +137,7 @@ class TablePreparer {
     }
 
     private static String createColumnName(final String predictionCol, final String featureCol) {
-        return featureCol + "(" + predictionCol + ")";
+        return featureCol + " (" + predictionCol + ")";
     }
 
     /**

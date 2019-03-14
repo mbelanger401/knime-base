@@ -115,7 +115,7 @@ public class ShapleyValuesLoopStartNodeModel extends NodeModel implements LoopSt
         if (m_estimator == null) {
             m_estimator = new ShapleyValuesEstimator(m_settings);
         }
-        return new DataTableSpec[]{m_estimator.configureLoopStart(roiSpec, samplingSpec)};
+        return new DataTableSpec[]{m_estimator.configureLoopStart(roiSpec, samplingSpec, m_settings)};
     }
 
     private static void checkCompatibility(final DataTableSpec roiSpec, final DataTableSpec samplingSpec)

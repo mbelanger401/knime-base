@@ -44,59 +44,73 @@
  * ---------------------------------------------------------------------
  *
  * History
- *   15.03.2016 (adrian): created
+ *   14.03.2019 (Adrian Nembach, KNIME GmbH, Konstanz, Germany): created
  */
 package org.knime.base.node.meta.explain.shapley;
 
-import org.knime.core.data.DataTableSpec;
-import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.NodeDialogPane;
-import org.knime.core.node.NodeSettingsRO;
-import org.knime.core.node.NodeSettingsWO;
-import org.knime.core.node.NotConfigurableException;
+import org.knime.core.node.util.CheckUtils;
 
-/**
- *
- * @author Adrian Nembach, KNIME.com
- * @author Simon Schmid, KNIME, Austin, USA
- */
-public class ShapleyValuesLoopStartNodeDialogPane extends NodeDialogPane {
+class SVId {
+    private int m_featureIdx;
 
-    // General components
+    private int m_iteration;
 
-    private final OptionsDialog m_options = new OptionsDialog();
+    private boolean m_foiIntact;
 
-    private final AdvancedOptionsDialog m_advancedOptions = new AdvancedOptionsDialog();
-    /**
-     *
-     */
-    public ShapleyValuesLoopStartNodeDialogPane() {
-        addTab("Options", m_options.getPanel());
-        addTab("Advanced Options", m_advancedOptions.getPanel());
+    public SVId(final int featureIdx, final int targetIdx, final boolean foiIntact) {
+        m_featureIdx = featureIdx;
+        m_iteration = targetIdx;
+        m_foiIntact = foiIntact;
+    }
+
+    public SVId() {
+        this(-1, -1, false);
     }
 
     /**
-     * {@inheritDoc}
+     * @return the featureIdx
      */
-    @Override
-    protected void saveSettingsTo(final NodeSettingsWO settings) throws InvalidSettingsException {
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        m_options.saveSettingsTo(cfg);
-        m_advancedOptions.saveSettingsTo(cfg);
-        cfg.saveSettings(settings);
+    int getFeatureIdx() {
+        CheckUtils.checkState(m_featureIdx >= 0, "The feature idx has not been set yet.");
+        return m_featureIdx;
     }
 
     /**
-     * {@inheritDoc}
+     * @param featureIdx the featureIdx to set
      */
-    @Override
-    protected void loadSettingsFrom(final NodeSettingsRO settings, final DataTableSpec[] specs)
-        throws NotConfigurableException {
-        final DataTableSpec inSpec = specs[0];
-        final ShapleyValuesSettings cfg = new ShapleyValuesSettings();
-        cfg.loadSettingsDialog(settings, inSpec);
-        m_options.loadSettingsFrom(cfg, inSpec);
-        m_advancedOptions.loadSettingsFrom(cfg, inSpec);
+    void setFeatureIdx(final int featureIdx) {
+        CheckUtils.checkArgument(featureIdx >= 0, "The feature idx must be non-negative but was " + featureIdx);
+        m_featureIdx = featureIdx;
+    }
+
+    /**
+     * @return the targetIdx
+     */
+    int getIteration() {
+        CheckUtils.checkState(m_iteration >= 0, "The iteration has not been set yet.");
+        return m_iteration;
+    }
+
+    /**
+     * @param iteration the targetIdx to set
+     */
+    void setIteration(final int iteration) {
+        CheckUtils.checkArgument(iteration >= 0, "The iteration must be non-negative but was " + iteration);
+        m_iteration = iteration;
+    }
+
+    /**
+     * @return the foiIntact
+     */
+    boolean getFoiIntact() {
+        return m_foiIntact;
+    }
+
+    /**
+     * @param foiIntact the foiIntact to set
+     */
+    void setFoiIntact(final boolean foiIntact) {
+        m_foiIntact = foiIntact;
     }
 
 }

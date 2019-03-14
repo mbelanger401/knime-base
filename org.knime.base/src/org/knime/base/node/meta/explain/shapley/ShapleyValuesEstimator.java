@@ -60,7 +60,6 @@ import org.knime.core.node.BufferedDataTable;
 import org.knime.core.node.ExecutionContext;
 import org.knime.core.node.ExecutionMonitor;
 import org.knime.core.node.InvalidSettingsException;
-import org.knime.core.node.util.CheckUtils;
 
 /**
  *
@@ -79,7 +78,7 @@ class ShapleyValuesEstimator {
 
     private final TablePreparer m_tablePreparer;
 
-    private final ShapleyValuesSettings m_settings;
+    private ShapleyValuesSettings m_settings;
 
     public ShapleyValuesEstimator(final ShapleyValuesSettings settings) {
         m_tablePreparer = new TablePreparer(settings.getFeatureCols(), settings.getPredictionCols());
@@ -89,7 +88,7 @@ class ShapleyValuesEstimator {
     private void initializeAlgorithm(final BufferedDataTable samplingTable, final ExecutionMonitor prog)
         throws Exception {
         final DataRow[] samplingSet = createSamplingSet(samplingTable, prog);
-        final FeatureReplacer fr = new FeatureReplacer(samplingSet);
+        final FeatureReplacer fr = new FeatureReplacer(samplingSet, m_settings.getSeed());
         m_algorithm = new ShapleyValuesAlgorithm(fr, m_settings.getIterationsPerFeature(),
             m_tablePreparer.getNumPredictionColumns());
     }
@@ -120,7 +119,7 @@ class ShapleyValuesEstimator {
             final DataRow row = roiIterator.next();
             exec.setProgress(current / total, "Perturb row " + row.getKey());
             current++;
-            for (DataRow perturbed : m_algorithm.prepareRow(roiIterator.next())) {
+            for (DataRow perturbed : m_algorithm.prepareRow(row)) {
                 container.addRowToTable(perturbed);
             }
         }
@@ -129,11 +128,10 @@ class ShapleyValuesEstimator {
         return container.getTable();
     }
 
-    public DataTableSpec configureLoopStart(final DataTableSpec roiSpec, final DataTableSpec samplingSpec)
-        throws InvalidSettingsException {
-        m_tablePreparer.updateSpecs(roiSpec);
-        CheckUtils.checkSetting(m_tablePreparer.isValidSamplingSpec(samplingSpec),
-            "The provided sampling table %s contains not all feature columns.", samplingSpec);
+    public DataTableSpec configureLoopStart(final DataTableSpec roiSpec, final DataTableSpec samplingSpec,
+        final ShapleyValuesSettings settings) throws InvalidSettingsException {
+        m_tablePreparer.updateSpecs(roiSpec, settings.getFeatureCols(), settings.getPredictionCols());
+        m_tablePreparer.checkSamplingSpec(samplingSpec);
         return m_tablePreparer.getLoopStartSpec();
     }
 

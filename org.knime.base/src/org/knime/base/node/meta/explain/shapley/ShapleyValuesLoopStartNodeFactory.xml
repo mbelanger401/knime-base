@@ -15,12 +15,12 @@
 	</fullDescription>
 
 	<ports>
-		<inPort index="0" name="Table containing the rows to explain.">
+		<inPort index="0" name="Table containing the rows to explain">
 			Table containing the rows to explain.
 		</inPort>
-		<inPort index="1" name="Table containing rows used to perturb rows in the first table.">
+		<inPort index="1" name="Sampling data">
 			Table containing rows used to perturb rows in the first table.
 		</inPort>
-		<outPort index="0" name="Perturbed rows.">Perturbed rows.</outPort>
+		<outPort index="0" name="Perturbed rows">Perturbed rows.</outPort>
 	</ports>
 </knimeNode>
